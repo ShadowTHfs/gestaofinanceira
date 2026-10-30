@@ -855,10 +855,17 @@ async function payTx(id) {
 
 // ------------------------------------------------------------------ Open Finance (Pluggy / Meu Pluggy — real)
 // state.of = { status: null | {...}, error: null | {message, code}, loading: bool }
+const LINK = (href, text) => `<a class="font-medium text-indigo-600 underline dark:text-indigo-400" href="${href}" target="_blank" rel="noopener">${text}</a>`;
+const OF_KEY_STEPS = `
+  <ol class="space-y-2 text-xs leading-relaxed text-slate-600 dark:text-slate-300">
+    <li><strong>1.</strong> Crie sua conta grátis no ${LINK('https://dashboard.pluggy.ai', 'Dashboard da Pluggy')} (use o mesmo e-mail que vai usar no Meu Pluggy).</li>
+    <li><strong>2.</strong> Em <em>Applications</em>, crie uma aplicação e copie o <strong>Client ID</strong> e o <strong>Client Secret</strong>.</li>
+    <li><strong>3.</strong> Cole os dois aqui. O Secret é guardado <strong>criptografado</strong> — nem o navegador nem outras pessoas conseguem lê-lo.</li>
+  </ol>`;
 const OF_STEPS = `
   <ol class="space-y-2 text-xs leading-relaxed text-slate-600 dark:text-slate-300">
-    <li><strong>1.</strong> Em <a class="font-medium text-indigo-600 underline dark:text-indigo-400" href="https://meu.pluggy.ai" target="_blank" rel="noopener">meu.pluggy.ai</a>, crie sua conta e conecte seus bancos (autoriza no app do banco).</li>
-    <li><strong>2.</strong> No <a class="font-medium text-indigo-600 underline dark:text-indigo-400" href="https://dashboard.pluggy.ai" target="_blank" rel="noopener">Dashboard da Pluggy</a> (mesmo login): <em>Applications → sua aplicação → Demo → Connect Account</em> e escolha o conector <strong>MeuPluggy</strong> (não o banco, nem o Sandbox).</li>
+    <li><strong>1.</strong> Em ${LINK('https://meu.pluggy.ai', 'meu.pluggy.ai')}, conecte seus bancos (autoriza no app do banco).</li>
+    <li><strong>2.</strong> No ${LINK('https://dashboard.pluggy.ai', 'Dashboard da Pluggy')}: <em>Applications → sua aplicação → Demo → Connect Account</em> e escolha o conector <strong>MeuPluggy</strong> (não o banco, nem o Sandbox).</li>
     <li><strong>3.</strong> Em <em>Connected Items</em>, abra cada banco e copie o <strong>Item ID</strong>. Cole aqui no app.</li>
   </ol>`;
 
@@ -879,7 +886,10 @@ async function loadOpenFinanceStatus({ force = false } = {}) {
   }
 }
 
-const ofReady = () => state.of.status?.configured && state.of.status?.allowlistSet && state.of.status?.allowed;
+const ofReady = () => {
+  const st = state.of.status;
+  return Boolean(st && st.allowed && st.encryptionReady && (st.hasOwnCredentials || st.sharedAvailable));
+};
 
 function bankLogo(name) {
   const n = String(name || 'Banco').replace(/^meu ?pluggy\s*[·\-:]\s*/i, '');
@@ -912,15 +922,22 @@ function renderOpenFinance() {
     return;
   }
   const st = state.of.status;
-  if (st && !ofReady()) {
-    const msg = !st.configured
-      ? 'Faltam os Secrets <code>PLUGGY_CLIENT_ID</code> e <code>PLUGGY_CLIENT_SECRET</code> na função do Supabase.'
-      : !st.allowlistSet
-        ? `Falta o Secret <code>PLUGGY_ALLOWED_EMAILS</code> com o seu e-mail (<strong>${escapeHTML(st.email || '')}</strong>).`
-        : `Esta conta (<strong>${escapeHTML(st.email || '')}</strong>) não está na lista de e-mails autorizados. O Meu Pluggy é de uso pessoal.`;
+  if (st && (!st.allowed || !st.encryptionReady)) {
+    const msg = !st.allowed
+      ? `Esta conta (<strong>${escapeHTML(st.email || '')}</strong>) não está na lista de pessoas autorizadas a usar o Open Finance neste app. Peça ao administrador para incluir seu e-mail.`
+      : 'O servidor está sem chave de criptografia. O administrador precisa definir o Secret <code>PLUGGY_ENCRYPTION_KEY</code> no Supabase.';
     box.innerHTML = `<div class="space-y-3 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 text-xs leading-relaxed text-amber-900 dark:text-amber-100">
       <p class="flex items-start gap-2">${icon('triangle-alert', 'mt-0.5 h-4 w-4 shrink-0')}<span>${msg}</span></p>
       <button type="button" class="btn-ghost px-3 py-1.5 text-xs" data-of-retry>${icon('refresh-cw', 'h-3.5 w-3.5')}Verificar de novo</button></div>`;
+    return;
+  }
+  if (st && !ofReady()) {
+    box.innerHTML = `<div class="space-y-3 rounded-xl border border-dashed border-slate-300/70 p-4 dark:border-slate-700/70">
+      <p class="flex items-center gap-2 text-sm font-medium">${icon('lock', 'h-4 w-4 text-indigo-500')}Passo 1: sua chave da Pluggy</p>
+      <p class="text-xs leading-relaxed text-slate-600 dark:text-slate-300">Cada pessoa usa a própria conta gratuita da Pluggy (Meu Pluggy é de uso pessoal). Assim, só você enxerga os seus bancos.</p>
+      ${OF_KEY_STEPS}
+      <button type="button" class="btn-primary w-full py-2 text-xs" data-of-keys>${icon('lock', 'h-3.5 w-3.5')}Cadastrar minha chave da Pluggy</button>
+    </div>`;
     return;
   }
 
@@ -969,10 +986,82 @@ function renderOpenFinance() {
     </div>` : ''}
     ${connHtml || `<div class="rounded-xl border border-dashed border-slate-300/70 p-4 dark:border-slate-700/70">
       <p class="mb-2 text-sm font-medium">Conecte seus bancos de verdade</p>${OF_STEPS}</div>`}
+    <p class="flex items-center justify-between gap-2 rounded-lg bg-slate-100/70 px-3 py-2 text-[11px] text-slate-600 dark:bg-slate-950/50 dark:text-slate-300">
+      <span class="flex items-center gap-1.5">${icon('lock', 'h-3 w-3')}${st?.hasOwnCredentials ? `Sua chave da Pluggy: <strong class="font-mono">${escapeHTML(st.clientIdHint || '')}</strong>` : 'Usando a chave compartilhada do administrador'}</span>
+      <span class="flex gap-2"><button type="button" class="font-medium text-indigo-600 hover:underline dark:text-indigo-400" data-of-keys>${st?.hasOwnCredentials ? 'Trocar' : 'Usar a minha'}</button>${st?.hasOwnCredentials ? '<button type="button" class="font-medium text-rose-600 hover:underline dark:text-rose-400" data-of-keys-delete>Remover</button>' : ''}</span>
+    </p>
     <div class="flex gap-2">
       <button type="button" class="btn-primary flex-1 py-2 text-xs" data-of-add ${conns.length >= 5 ? 'disabled title="O Meu Pluggy permite até 5 conexões"' : ''}>${icon('plus', 'h-3.5 w-3.5')}Adicionar conexão</button>
       ${conns.length > 1 ? `<button type="button" class="btn-ghost px-3 text-xs" data-of-sync-all title="Sincronizar todas">${icon('refresh-cw', 'h-3.5 w-3.5')}Todas</button>` : ''}
     </div>`;
+}
+
+function openCredentialsModal() {
+  const st = state.of.status || {};
+  $('#of-modal-body').innerHTML = `
+    <form id="of-keys-form" novalidate>
+      <header class="flex items-center justify-between border-b border-slate-200/80 px-6 py-4 dark:border-slate-800/80">
+        <div>
+          <h3 id="of-title" class="text-base font-semibold">${st.hasOwnCredentials ? 'Trocar' : 'Cadastrar'} minha chave da Pluggy</h3>
+          <p class="text-xs text-slate-500 dark:text-slate-400">Fica guardada criptografada no servidor</p>
+        </div>
+        <button type="button" class="btn-icon" data-close aria-label="Fechar">${icon('x')}</button>
+      </header>
+      <div class="space-y-4 px-6 py-5">
+        <div class="rounded-xl bg-slate-100/70 p-4 dark:bg-slate-950/50">${OF_KEY_STEPS}</div>
+        <div>
+          <label for="of-client-id" class="field-label">Client ID</label>
+          <input id="of-client-id" class="input font-mono text-sm" autocomplete="off" spellcheck="false" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" />
+        </div>
+        <div>
+          <label for="of-client-secret" class="field-label">Client Secret</label>
+          <input id="of-client-secret" type="password" class="input font-mono text-sm" autocomplete="new-password" spellcheck="false" placeholder="••••••••" />
+          <p class="mt-1 text-[11px] text-slate-500 dark:text-slate-400">A Pluggy mostra o Secret uma vez. Se perdeu, gere outro em <em>Refresh Secret</em> na página da aplicação.</p>
+        </div>
+        <p id="of-keys-error" class="hidden rounded-lg bg-rose-500/10 px-3 py-2 text-xs text-rose-700 dark:text-rose-300"></p>
+      </div>
+      <footer class="flex justify-end gap-2 border-t border-slate-200/80 px-6 py-4 dark:border-slate-800/80">
+        <button type="button" class="btn-ghost" data-close>Cancelar</button>
+        <button type="submit" class="btn-primary" id="of-keys-submit">${icon('shield-check')}Validar e salvar</button>
+      </footer>
+    </form>`;
+  $('#of-modal').showModal();
+  setTimeout(() => $('#of-client-id').focus(), 50);
+  $('#of-keys-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const id = $('#of-client-id').value.trim();
+    const secret = $('#of-client-secret').value.trim();
+    const err = $('#of-keys-error');
+    const show = (m) => { err.textContent = m; err.classList.toggle('hidden', !m); };
+    if (id.length < 8 || secret.length < 8) return show('Cole o Client ID e o Client Secret completos, como aparecem no Dashboard da Pluggy.');
+    show('');
+    const btn = $('#of-keys-submit');
+    btn.disabled = true;
+    btn.innerHTML = `${icon('loader-circle', 'h-4 w-4 animate-spin')}Validando na Pluggy…`;
+    try {
+      await openFinance.saveCredentials(id, secret);
+      $('#of-client-secret').value = '';
+      $('#of-modal').close();
+      await loadOpenFinanceStatus({ force: true });
+      toast('Chave da Pluggy validada e salva com segurança', 'success');
+    } catch (ex) {
+      show(ex.message);
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = `${icon('shield-check')}Validar e salvar`;
+    }
+  });
+}
+
+async function removeCredentials() {
+  if (!window.confirm('Remover sua chave da Pluggy deste app?\n\nSuas transações continuam salvas, mas as conexões param de sincronizar até você cadastrar a chave de novo.')) return;
+  try {
+    await openFinance.deleteCredentials();
+    await loadOpenFinanceStatus({ force: true });
+    toast('Chave removida', 'info');
+  } catch (err) {
+    toast(`Não foi possível remover: ${err.message}`, 'error');
+  }
 }
 
 function openAddConnection() {
@@ -1689,7 +1778,7 @@ function bindEvents() {
 
   // Ações delegadas (lista, estados vazios, recorrências, Open Finance)
   document.addEventListener('click', async (e) => {
-    const el = e.target.closest('[data-delete],[data-delete-rule],[data-open-new],[data-clear-filters],[data-of-add],[data-of-retry],[data-of-sync-all],[data-of-sync],[data-of-disconnect],[data-close],[data-pay],[data-toggle-items],[data-edit-cat],[data-del-cat],[data-deposit-goal],[data-edit-goal],[data-new-goal],[data-remove-item]');
+    const el = e.target.closest('[data-delete],[data-delete-rule],[data-open-new],[data-clear-filters],[data-of-add],[data-of-keys],[data-of-keys-delete],[data-of-retry],[data-of-sync-all],[data-of-sync],[data-of-disconnect],[data-close],[data-pay],[data-toggle-items],[data-edit-cat],[data-del-cat],[data-deposit-goal],[data-edit-goal],[data-new-goal],[data-remove-item]');
     if (!el) return;
 
     if (el.dataset.pay) { el.disabled = true; await payTx(el.dataset.pay); return; }
@@ -1741,6 +1830,8 @@ function bindEvents() {
       return;
     }
     if (el.hasAttribute('data-of-add')) { openAddConnection(); return; }
+    if (el.hasAttribute('data-of-keys')) { openCredentialsModal(); return; }
+    if (el.hasAttribute('data-of-keys-delete')) { await removeCredentials(); return; }
     if (el.hasAttribute('data-of-retry')) { state.of.error = null; await loadOpenFinanceStatus({ force: true }); return; }
     if (el.dataset.ofSync) { await runSync(el.dataset.ofSync); return; }
     if (el.hasAttribute('data-of-sync-all')) { await runSync(null); return; }

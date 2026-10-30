@@ -212,3 +212,22 @@ create policy "own_bank_accounts" on public.bank_accounts
   using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
 revoke all on public.bank_accounts from anon;
 grant select, insert, update, delete on public.bank_accounts to authenticated;
+
+-- =============================================================================
+-- v5 — Chaves da Pluggy por usuário (cada pessoa usa o próprio Meu Pluggy)
+-- O Client Secret é gravado CRIPTOGRAFADO pela Edge Function "pluggy"
+-- (AES-GCM com uma chave que só existe no servidor). O navegador nunca o lê.
+-- =============================================================================
+create table if not exists public.pluggy_credentials (
+  user_id            uuid primary key default auth.uid() references auth.users(id) on delete cascade,
+  client_id          text not null,
+  client_secret_enc  text not null,
+  updated_at         timestamptz not null default now()
+);
+alter table public.pluggy_credentials enable row level security;
+drop policy if exists "own_pluggy_credentials" on public.pluggy_credentials;
+create policy "own_pluggy_credentials" on public.pluggy_credentials
+  for all to authenticated
+  using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
+revoke all on public.pluggy_credentials from anon;
+grant select, insert, update, delete on public.pluggy_credentials to authenticated;

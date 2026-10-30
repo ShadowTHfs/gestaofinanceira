@@ -17,12 +17,14 @@
 
 ## Para ativar a Parte 4 e o Google (fazer uma vez)
 - [ ] Rodar o schema.sql (v4) no SQL Editor
-- [ ] Publicar a Edge Function "pluggy" + Secrets PLUGGY_CLIENT_ID, PLUGGY_CLIENT_SECRET, PLUGGY_ALLOWED_EMAILS
-- [ ] Conectar bancos no meu.pluggy.ai e colar os Item IDs no app
+- [ ] Publicar a Edge Function "pluggy" + Secret PLUGGY_ALLOWED_EMAILS com os e-mails das 5 pessoas
+- [ ] Cada pessoa: criar a própria chave no Dashboard da Pluggy, cadastrar no app e conectar os bancos (GUIA-PLUGGY.md, Parte C)
+- [ ] (Opcional) Desligar novos cadastros no Supabase depois que as 5 pessoas entrarem
 - [ ] Google Cloud: ID do cliente OAuth + ativar provedor Google no Supabase
 
 ## Atenção
-- Meu Pluggy: uso pessoal, até 5 conexões, sem uso comercial. Para vender o app a terceiros → plano comercial da Pluggy.
+- Meu Pluggy: uso pessoal, até 5 conexões POR PESSOA, sem uso comercial — por isso cada pessoa usa a própria chave.
+  Para vender o app a terceiros → plano comercial da Pluggy (aí volta a ser uma chave só + widget de conexão).
 - Autorização do Meu Pluggy vence em 1 ano (o app avisa).
 
 ## Melhorias futuras

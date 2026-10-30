@@ -5,8 +5,8 @@
 // "pluggy" do Supabase, que guarda o Client Secret e grava os dados com o
 // login do próprio usuário (RLS).
 //
-// Requisitos: modo nuvem (Supabase + login), a função "pluggy" publicada e os
-// Secrets PLUGGY_CLIENT_ID, PLUGGY_CLIENT_SECRET e PLUGGY_ALLOWED_EMAILS.
+// Requisitos: modo nuvem (Supabase + login) e a função "pluggy" publicada.
+// Cada pessoa cadastra no app a própria chave da Pluggy (Client ID/Secret).
 // =============================================================================
 import { getSupabase, getRepositoryStatus } from './supabaseClient.js';
 
@@ -45,8 +45,14 @@ async function invoke(body) {
   throw new OpenFinanceError(msg || 'Erro ao chamar a função.', 'error');
 }
 
-/** { configured, allowlistSet, allowed, email } */
+/** { email, allowed, encryptionReady, hasOwnCredentials, clientIdHint, sharedAvailable } */
 export const getStatus = () => invoke({ action: 'status' });
+
+/** Cada pessoa cadastra a PRÓPRIA chave da Pluggy (validada e criptografada no servidor). */
+export const saveCredentials = (clientId, clientSecret) =>
+  invoke({ action: 'save-credentials', clientId: String(clientId || '').trim(), clientSecret: String(clientSecret || '').trim() });
+
+export const deleteCredentials = () => invoke({ action: 'delete-credentials' });
 
 /** Valida o Item ID na Pluggy, salva a conexão e importa contas e transações. */
 export const addItem = (itemId) => invoke({ action: 'add-item', itemId: String(itemId || '').trim() });
