@@ -38,8 +38,55 @@
     <div class="absolute inset-0 bg-[radial-gradient(rgba(100,116,139,0.12)_1px,transparent_1px)] [background-size:24px_24px] [mask-image:linear-gradient(to_bottom,black,transparent_70%)]"></div>
   </div>
 
+
+  <!-- ===================== TELA DE LOGIN (só com Supabase configurado) ===================== -->
+  <section id="auth-screen" class="hidden min-h-screen items-center justify-center px-4 py-10">
+    <div class="w-full max-w-md animate-fade-up">
+      <div class="mb-8 text-center">
+        <div class="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-xl shadow-indigo-500/30">
+          <span data-icon="wallet" data-icon-class="h-7 w-7"></span>
+        </div>
+        <h1 class="mt-4 text-2xl font-bold tracking-tight">Finanças</h1>
+        <p id="auth-subtitle" class="mt-1 text-sm text-slate-500 dark:text-slate-400">Entre para ver seu painel financeiro</p>
+      </div>
+
+      <div class="glass-card p-6">
+        <div id="auth-tabs" class="segmented mb-5" role="tablist">
+          <button type="button" data-auth-tab="login" data-kind="neutral" aria-pressed="true" role="tab">Entrar</button>
+          <button type="button" data-auth-tab="signup" data-kind="neutral" aria-pressed="false" role="tab">Criar conta</button>
+        </div>
+
+        <form id="auth-form" class="space-y-4" novalidate>
+          <div>
+            <label for="auth-email" class="field-label">E-mail</label>
+            <input id="auth-email" type="email" autocomplete="email" class="input" placeholder="voce@email.com" required />
+          </div>
+          <div id="auth-password-wrap">
+            <div class="flex items-center justify-between">
+              <label for="auth-password" class="field-label">Senha</label>
+              <button type="button" id="auth-forgot" class="mb-1.5 text-xs font-medium text-indigo-600 hover:underline dark:text-indigo-400">Esqueci minha senha</button>
+            </div>
+            <input id="auth-password" type="password" autocomplete="current-password" class="input" placeholder="••••••••" minlength="6" required />
+          </div>
+          <div id="auth-confirm-wrap" class="hidden">
+            <label for="auth-confirm" class="field-label">Confirmar senha</label>
+            <input id="auth-confirm" type="password" autocomplete="new-password" class="input" placeholder="Repita a senha" />
+          </div>
+
+          <div id="auth-message" class="hidden rounded-xl px-3 py-2.5 text-xs leading-relaxed"></div>
+
+          <button id="auth-submit" type="submit" class="btn-primary w-full py-3">Entrar</button>
+          <button type="button" id="auth-back" class="hidden w-full text-center text-xs font-medium text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white">← Voltar para o login</button>
+        </form>
+      </div>
+      <p class="mt-6 flex items-center justify-center gap-1.5 text-center text-xs text-slate-500 dark:text-slate-400">
+        <span data-icon="shield-check" data-icon-class="h-3.5 w-3.5"></span>Seus dados ficam protegidos e visíveis só para você.
+      </p>
+    </div>
+  </section>
+
   <!-- ===================== CABEÇALHO ===================== -->
-  <header class="sticky top-0 z-30 border-b border-slate-200/70 bg-white/70 backdrop-blur-xl dark:border-slate-800/70 dark:bg-slate-950/70">
+  <header id="app-header" class="sticky top-0 z-30 border-b border-slate-200/70 bg-white/70 backdrop-blur-xl dark:border-slate-800/70 dark:bg-slate-950/70">
     <div class="mx-auto flex max-w-7xl items-center gap-3 px-4 py-3 sm:px-6">
       <div class="flex items-center gap-3">
         <div class="grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-lg shadow-indigo-500/30">
@@ -61,6 +108,16 @@
         <button id="btn-settings" class="btn-icon" type="button" aria-label="Configurações" title="Saldo inicial e orçamento">
           <span data-icon="settings"></span>
         </button>
+        <div id="user-menu" class="relative hidden">
+          <button id="btn-user" class="ml-1 grid h-9 w-9 place-items-center rounded-full bg-gradient-to-br from-slate-200 to-slate-300 text-xs font-bold text-slate-700 ring-2 ring-white/60 transition-all duration-300 hover:ring-indigo-400/60 dark:from-slate-700 dark:to-slate-800 dark:text-slate-100 dark:ring-slate-900" type="button" aria-haspopup="menu" aria-expanded="false" aria-label="Conta"></button>
+          <div id="user-dropdown" class="glass-card absolute right-0 top-11 hidden w-64 p-2" role="menu">
+            <p class="px-3 pb-1 pt-2 text-[11px] font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Conectado como</p>
+            <p id="user-email" class="truncate px-3 pb-2 text-sm font-medium"></p>
+            <div class="my-1 border-t border-slate-200/80 dark:border-slate-800/80"></div>
+            <button id="btn-change-password" type="button" class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors hover:bg-slate-100 dark:hover:bg-slate-800" role="menuitem"><span data-icon="lock"></span>Trocar senha</button>
+            <button id="btn-logout" type="button" class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-rose-600 transition-colors hover:bg-rose-500/10 dark:text-rose-300" role="menuitem"><span data-icon="log-out"></span>Sair</button>
+          </div>
+        </div>
         <button id="btn-new" class="btn-primary ml-1" type="button">
           <span data-icon="plus"></span><span class="hidden sm:inline">Nova transação</span><span class="sm:hidden">Nova</span>
         </button>
@@ -68,7 +125,7 @@
     </div>
   </header>
 
-  <main class="mx-auto max-w-7xl space-y-6 px-4 pb-16 pt-6 sm:px-6">
+  <main id="app-main" class="mx-auto max-w-7xl space-y-6 px-4 pb-16 pt-6 sm:px-6">
     <!-- ===================== NAVEGAÇÃO TEMPORAL ===================== -->
     <section class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
       <div>
@@ -142,6 +199,18 @@
       </article>
     </section>
 
+    <!-- ===================== METAS ===================== -->
+    <section class="glass-card p-5">
+      <header class="mb-4 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 class="card-title flex items-center gap-2"><span data-icon="target" class="text-indigo-500"></span>Metas</h2>
+          <p id="goals-sub" class="card-sub mt-0.5">Quanto guardar e em quanto tempo você chega lá</p>
+        </div>
+        <button type="button" id="btn-new-goal" class="btn-ghost"><span data-icon="plus"></span>Nova meta</button>
+      </header>
+      <div id="goals-list" class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3"></div>
+    </section>
+
     <!-- ===================== TRANSAÇÕES + LATERAL ===================== -->
     <section class="grid grid-cols-1 gap-4 lg:grid-cols-3">
       <article class="glass-card p-5 lg:col-span-2 lg:flex lg:flex-col">
@@ -178,6 +247,17 @@
       </article>
 
       <div class="space-y-4">
+        <!-- Próximos vencimentos -->
+        <article class="glass-card glass-hover p-5">
+          <header class="mb-3 flex items-start justify-between gap-2">
+            <div>
+              <h2 class="card-title flex items-center gap-2"><span data-icon="bell" class="text-indigo-500"></span>Próximos vencimentos</h2>
+              <p id="upcoming-sub" class="card-sub mt-0.5">Atrasados e próximos 30 dias</p>
+            </div>
+          </header>
+          <div id="upcoming-list"></div>
+        </article>
+
         <!-- Contas fixas, assinaturas e parcelamentos -->
         <article class="glass-card glass-hover p-5">
           <header class="mb-3">
@@ -212,71 +292,277 @@
   </main>
 
   <!-- ===================== MODAL: NOVA TRANSAÇÃO ===================== -->
-  <dialog id="tx-modal" class="modal" aria-labelledby="tx-modal-title">
-    <form id="tx-form" method="dialog" novalidate>
+  <dialog id="tx-modal" class="modal max-w-xl" aria-labelledby="tx-modal-title">
+    <form id="tx-form" method="dialog" novalidate class="flex max-h-[92vh] flex-col">
       <header class="flex items-center justify-between border-b border-slate-200/80 px-6 py-4 dark:border-slate-800/80">
         <div>
           <h3 id="tx-modal-title" class="text-base font-semibold">Nova transação</h3>
-          <p class="text-xs text-slate-500 dark:text-slate-400">Registre uma entrada ou saída</p>
+          <p class="text-xs text-slate-500 dark:text-slate-400">Registre, agende ou programe uma série</p>
         </div>
         <button type="button" class="btn-icon" data-close aria-label="Fechar"><span data-icon="x"></span></button>
       </header>
 
-      <div class="space-y-4 px-6 py-5">
+      <div class="scroll-thin flex-1 space-y-4 overflow-y-auto px-6 py-5">
         <div class="segmented" role="group" aria-label="Tipo">
           <button type="button" data-kind="expense" aria-pressed="true">Saída</button>
           <button type="button" data-kind="income" aria-pressed="false">Entrada</button>
         </div>
 
-        <div>
-          <label for="tx-amount" class="field-label" id="tx-amount-label">Valor</label>
-          <div class="relative">
-            <span class="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-sm font-semibold text-slate-400">R$</span>
-            <input id="tx-amount" name="amount" inputmode="decimal" class="input pl-10 text-lg font-semibold tabular-nums" placeholder="0,00" autocomplete="off" />
+        <div class="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_1.3fr]">
+          <div>
+            <label for="tx-amount" class="field-label" id="tx-amount-label">Valor</label>
+            <div class="relative">
+              <span class="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-sm font-semibold text-slate-400">R$</span>
+              <input id="tx-amount" name="amount" inputmode="decimal" class="input pl-10 text-lg font-semibold tabular-nums" placeholder="0,00" autocomplete="off" />
+            </div>
+            <p class="mt-1 hidden text-xs text-rose-500" data-err="amount">Informe um valor maior que zero.</p>
           </div>
-          <p class="mt-1 hidden text-xs text-rose-500" data-err="amount">Informe um valor maior que zero.</p>
-        </div>
-
-        <div>
-          <label for="tx-desc" class="field-label">Descrição</label>
-          <input id="tx-desc" name="description" class="input" maxlength="80" placeholder="Ex.: Supermercado, Salário…" autocomplete="off" />
-          <p class="mt-1 hidden text-xs text-rose-500" data-err="description">Descreva a transação.</p>
+          <div>
+            <label for="tx-desc" class="field-label">Descrição</label>
+            <input id="tx-desc" name="description" class="input py-3" maxlength="80" placeholder="Ex.: Supermercado, Salário…" autocomplete="off" />
+            <p class="mt-1 hidden text-xs text-rose-500" data-err="description">Descreva a transação.</p>
+          </div>
         </div>
 
         <div class="grid grid-cols-2 gap-3">
           <div>
-            <label for="tx-date" class="field-label">Data</label>
+            <label for="tx-date" class="field-label" id="tx-date-label">Data</label>
             <input id="tx-date" name="date" type="date" class="input" />
             <p class="mt-1 hidden text-xs text-rose-500" data-err="date">Data inválida.</p>
           </div>
           <div>
             <label for="tx-category" class="field-label">Categoria</label>
-            <select id="tx-category" name="category" class="input"></select>
+            <div class="flex gap-1.5">
+              <select id="tx-category" name="category" class="input min-w-0 flex-1"></select>
+              <button type="button" id="tx-new-category" class="btn-ghost shrink-0 px-2.5" title="Criar categoria" aria-label="Criar nova categoria"><span data-icon="plus"></span></button>
+            </div>
           </div>
         </div>
 
-        <div class="grid grid-cols-2 gap-3">
-          <div>
-            <label for="tx-repeat" class="field-label">Repetição</label>
-            <select id="tx-repeat" name="repeat" class="input">
-              <option value="none">Não repete</option>
-              <option value="fixed">Conta fixa mensal</option>
-              <option value="subscription">Assinatura mensal</option>
-              <option value="installments">Parcelado</option>
-            </select>
+        <!-- Status: pago / a pagar -->
+        <label class="flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-slate-200/80 px-4 py-3 dark:border-slate-800/80">
+          <span>
+            <span id="tx-paid-label" class="block text-sm font-medium">Já foi pago</span>
+            <span id="tx-paid-hint" class="block text-xs text-slate-500 dark:text-slate-400">Desligue para agendar (fica em "Próximos vencimentos")</span>
+          </span>
+          <span class="relative inline-flex">
+            <input id="tx-paid" type="checkbox" class="peer sr-only" checked />
+            <span class="h-6 w-11 rounded-full bg-slate-300 transition-colors duration-300 peer-checked:bg-emerald-500 peer-focus-visible:ring-2 peer-focus-visible:ring-indigo-400 dark:bg-slate-700 dark:peer-checked:bg-emerald-500"></span>
+            <span class="absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform duration-300 peer-checked:translate-x-5"></span>
+          </span>
+        </label>
+
+        <!-- Repetição / agendamento -->
+        <div class="rounded-xl border border-slate-200/80 p-4 dark:border-slate-800/80">
+          <label for="tx-repeat" class="field-label">Repetição</label>
+          <select id="tx-repeat" name="repeat" class="input">
+            <option value="none">Não repete</option>
+            <option value="series">Repetir (agendar uma série)</option>
+            <option value="installments">Parcelado</option>
+          </select>
+
+          <div id="tx-series-wrap" class="mt-3 hidden space-y-3">
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label for="tx-frequency" class="field-label">Frequência</label>
+                <select id="tx-frequency" class="input">
+                  <option value="weekly">Toda semana</option>
+                  <option value="monthly" selected>Todo mês</option>
+                  <option value="yearly">Todo ano</option>
+                </select>
+              </div>
+              <div id="tx-kind-wrap">
+                <label for="tx-kind" class="field-label">Tipo de conta</label>
+                <select id="tx-kind" class="input">
+                  <option value="fixed">Conta fixa</option>
+                  <option value="subscription">Assinatura</option>
+                </select>
+              </div>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label for="tx-duration" class="field-label">Por quanto tempo</label>
+                <select id="tx-duration" class="input">
+                  <option value="forever">Sem fim</option>
+                  <option value="count">Nº de vezes</option>
+                  <option value="until">Até uma data</option>
+                </select>
+              </div>
+              <div id="tx-count-wrap" class="hidden">
+                <label for="tx-count" class="field-label">Quantas vezes</label>
+                <input id="tx-count" type="number" min="2" max="600" value="12" class="input" />
+                <p class="mt-1 hidden text-xs text-rose-500" data-err="count">Entre 2 e 600.</p>
+              </div>
+              <div id="tx-until-wrap" class="hidden">
+                <label for="tx-until" class="field-label">Última data</label>
+                <input id="tx-until" type="date" class="input" />
+                <p class="mt-1 hidden text-xs text-rose-500" data-err="until">Precisa ser depois da 1ª data.</p>
+              </div>
+            </div>
           </div>
-          <div id="tx-installments-wrap" class="hidden">
+
+          <div id="tx-installments-wrap" class="mt-3 hidden">
             <label for="tx-installments" class="field-label">Nº de parcelas</label>
             <input id="tx-installments" name="installments" type="number" min="2" max="48" value="3" class="input" />
             <p class="mt-1 hidden text-xs text-rose-500" data-err="installments">Entre 2 e 48.</p>
           </div>
+          <p id="tx-repeat-hint" class="mt-3 hidden rounded-lg bg-indigo-500/10 px-3 py-2 text-xs text-indigo-700 dark:text-indigo-300"></p>
         </div>
-        <p id="tx-repeat-hint" class="hidden rounded-xl bg-indigo-500/10 px-3 py-2 text-xs text-indigo-700 dark:text-indigo-300"></p>
+
+        <!-- Itens -->
+        <details id="tx-items-box" class="group rounded-xl border border-slate-200/80 dark:border-slate-800/80">
+          <summary class="flex cursor-pointer list-none items-center justify-between gap-2 px-4 py-3 text-sm font-medium">
+            <span class="flex items-center gap-2"><span data-icon="list"></span>Itens da compra <span class="text-xs font-normal text-slate-500 dark:text-slate-400">(opcional)</span></span>
+            <span id="tx-items-count" class="text-xs text-slate-500 dark:text-slate-400"></span>
+          </summary>
+          <div class="space-y-2 border-t border-slate-200/80 px-4 py-3 dark:border-slate-800/80">
+            <div class="grid grid-cols-[1fr_4rem_6rem_2rem] gap-2 text-[11px] font-medium text-slate-500 dark:text-slate-400"><span>Item</span><span>Qtd</span><span>Preço un.</span><span></span></div>
+            <div id="tx-items" class="space-y-2"></div>
+            <div class="flex flex-wrap items-center justify-between gap-2 pt-1">
+              <button type="button" id="tx-add-item" class="btn-ghost px-3 py-1.5 text-xs"><span data-icon="plus" data-icon-class="h-3.5 w-3.5"></span>Adicionar item</button>
+              <label class="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300"><input id="tx-items-sum" type="checkbox" class="h-4 w-4 rounded accent-indigo-500" checked />Valor = soma dos itens</label>
+            </div>
+            <p class="text-right text-sm">Total dos itens: <strong id="tx-items-total" class="tabular-nums">R$ 0,00</strong></p>
+          </div>
+        </details>
       </div>
 
       <footer class="flex justify-end gap-2 border-t border-slate-200/80 px-6 py-4 dark:border-slate-800/80">
         <button type="button" class="btn-ghost" data-close>Cancelar</button>
         <button type="submit" class="btn-primary" id="tx-submit"><span data-icon="check"></span>Salvar</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <!-- ===================== MODAL: CATEGORIAS ===================== -->
+  <dialog id="cat-modal" class="modal max-w-lg" aria-labelledby="cat-title">
+    <div class="flex max-h-[92vh] flex-col">
+      <header class="flex items-center justify-between border-b border-slate-200/80 px-6 py-4 dark:border-slate-800/80">
+        <div>
+          <h3 id="cat-title" class="text-base font-semibold">Categorias</h3>
+          <p class="text-xs text-slate-500 dark:text-slate-400">Crie categorias com o seu jeito de organizar</p>
+        </div>
+        <button type="button" class="btn-icon" data-close aria-label="Fechar"><span data-icon="x"></span></button>
+      </header>
+      <div class="scroll-thin flex-1 space-y-4 overflow-y-auto px-6 py-5">
+        <form id="cat-form" class="space-y-3 rounded-xl border border-slate-200/80 p-4 dark:border-slate-800/80" novalidate>
+          <div class="flex items-center justify-between">
+            <p id="cat-form-title" class="text-sm font-semibold">Nova categoria</p>
+            <span id="cat-preview"></span>
+          </div>
+          <div class="grid grid-cols-[1fr_auto] gap-3">
+            <div>
+              <label for="cat-label" class="field-label">Nome</label>
+              <input id="cat-label" class="input" maxlength="30" placeholder="Ex.: Pets, Moto, Igreja…" autocomplete="off" />
+              <p class="mt-1 hidden text-xs text-rose-500" data-err="cat-label">Dê um nome (até 30 letras) que ainda não exista.</p>
+            </div>
+            <div>
+              <span class="field-label">Tipo</span>
+              <div class="segmented w-44" id="cat-type">
+                <button type="button" data-kind="expense" aria-pressed="true">Saída</button>
+                <button type="button" data-kind="income" aria-pressed="false">Entrada</button>
+              </div>
+            </div>
+          </div>
+          <div><span class="field-label">Cor</span><div id="cat-colors" class="flex flex-wrap gap-2"></div></div>
+          <div><span class="field-label">Ícone</span><div id="cat-icons" class="grid grid-cols-8 gap-1.5 sm:grid-cols-12"></div></div>
+          <div class="flex justify-end gap-2 pt-1">
+            <button type="button" id="cat-cancel-edit" class="btn-ghost hidden">Cancelar edição</button>
+            <button type="submit" id="cat-submit" class="btn-primary"><span data-icon="check"></span>Criar categoria</button>
+          </div>
+        </form>
+        <div>
+          <p class="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Suas categorias</p>
+          <ul id="cat-list" class="space-y-1"></ul>
+        </div>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- ===================== MODAL: META ===================== -->
+  <dialog id="goal-modal" class="modal max-w-3xl" aria-labelledby="goal-title">
+    <form id="goal-form" method="dialog" novalidate class="flex max-h-[92vh] flex-col">
+      <header class="flex items-center justify-between border-b border-slate-200/80 px-6 py-4 dark:border-slate-800/80">
+        <div>
+          <h3 id="goal-title" class="text-base font-semibold">Nova meta</h3>
+          <p class="text-xs text-slate-500 dark:text-slate-400">O cálculo atualiza enquanto você digita</p>
+        </div>
+        <button type="button" class="btn-icon" data-close aria-label="Fechar"><span data-icon="x"></span></button>
+      </header>
+      <div class="scroll-thin grid flex-1 grid-cols-1 gap-6 overflow-y-auto px-6 py-5 md:grid-cols-2">
+        <div class="space-y-3">
+          <div>
+            <label for="g-name" class="field-label">Nome da meta</label>
+            <input id="g-name" class="input" maxlength="60" placeholder="Ex.: Reserva de emergência, Carro, Viagem…" autocomplete="off" />
+            <p class="mt-1 hidden text-xs text-rose-500" data-err="g-name">Dê um nome à meta.</p>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label for="g-target" class="field-label">Quanto quer juntar</label>
+              <input id="g-target" class="input tabular-nums" inputmode="decimal" placeholder="0,00" />
+              <p class="mt-1 hidden text-xs text-rose-500" data-err="g-target">Valor maior que zero.</p>
+            </div>
+            <div>
+              <label for="g-saved" class="field-label">Quanto já tem</label>
+              <input id="g-saved" class="input tabular-nums" inputmode="decimal" placeholder="0,00" />
+            </div>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label for="g-date" class="field-label">Até quando (opcional)</label>
+              <input id="g-date" type="date" class="input" />
+              <p class="mt-1 hidden text-xs text-rose-500" data-err="g-date">Escolha uma data futura.</p>
+            </div>
+            <div>
+              <label for="g-rate" class="field-label">Rendimento (% ao ano)</label>
+              <input id="g-rate" class="input tabular-nums" inputmode="decimal" placeholder="0" />
+            </div>
+          </div>
+          <div>
+            <label for="g-monthly" class="field-label">Quanto pretende guardar por mês (opcional)</label>
+            <input id="g-monthly" class="input tabular-nums" inputmode="decimal" />
+            <p id="g-monthly-hint" class="mt-1 text-xs text-slate-500 dark:text-slate-400"></p>
+          </div>
+          <div><span class="field-label">Cor</span><div id="g-colors" class="flex flex-wrap gap-2"></div></div>
+          <div><span class="field-label">Ícone</span><div id="g-icons" class="grid grid-cols-10 gap-1.5"></div></div>
+        </div>
+        <div id="goal-sim" class="space-y-3"></div>
+      </div>
+      <footer class="flex items-center justify-between gap-2 border-t border-slate-200/80 px-6 py-4 dark:border-slate-800/80">
+        <button type="button" id="goal-delete" class="btn-danger hidden"><span data-icon="trash-2"></span>Excluir</button>
+        <div class="ml-auto flex gap-2">
+          <button type="button" class="btn-ghost" data-close>Cancelar</button>
+          <button type="submit" class="btn-primary"><span data-icon="check"></span>Salvar meta</button>
+        </div>
+      </footer>
+    </form>
+  </dialog>
+
+  <!-- ===================== MODAL: GUARDAR NA META ===================== -->
+  <dialog id="deposit-modal" class="modal max-w-sm" aria-labelledby="deposit-title">
+    <form id="deposit-form" method="dialog" novalidate>
+      <header class="border-b border-slate-200/80 px-6 py-4 dark:border-slate-800/80">
+        <h3 id="deposit-title" class="text-base font-semibold">Guardar na meta</h3>
+        <p id="deposit-sub" class="text-xs text-slate-500 dark:text-slate-400"></p>
+      </header>
+      <div class="space-y-3 px-6 py-5">
+        <div class="segmented" id="deposit-mode">
+          <button type="button" data-kind="income" data-mode="add" aria-pressed="true">Guardar</button>
+          <button type="button" data-kind="expense" data-mode="withdraw" aria-pressed="false">Retirar</button>
+        </div>
+        <div>
+          <label for="deposit-amount" class="field-label">Valor</label>
+          <input id="deposit-amount" class="input text-lg font-semibold tabular-nums" inputmode="decimal" placeholder="0,00" />
+          <p class="mt-1 hidden text-xs text-rose-500" data-err="deposit">Valor inválido.</p>
+        </div>
+        <label class="flex items-start gap-2 text-xs text-slate-600 dark:text-slate-300">
+          <input id="deposit-register" type="checkbox" class="mt-0.5 h-4 w-4 rounded accent-indigo-500" />
+          <span>Registrar também no extrato (desconta do saldo atual como "Guardado p/ metas")</span>
+        </label>
+      </div>
+      <footer class="flex justify-end gap-2 border-t border-slate-200/80 px-6 py-4 dark:border-slate-800/80">
+        <button type="button" class="btn-ghost" data-close>Cancelar</button>
+        <button type="submit" class="btn-primary"><span data-icon="check"></span>Confirmar</button>
       </footer>
     </form>
   </dialog>
@@ -304,7 +590,12 @@
         </div>
         <p class="hidden text-xs text-rose-500" data-err="settings">Use valores numéricos válidos (orçamento maior ou igual a zero).</p>
 
-        <div class="rounded-xl border border-slate-200/80 p-4 dark:border-slate-800/80">
+        <button type="button" id="btn-manage-categories" class="btn-ghost w-full justify-start"><span data-icon="tag"></span>Gerenciar categorias</button>
+        <div id="settings-cloud-note" class="hidden rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4 text-xs text-emerald-800 dark:text-emerald-200">
+          <p class="flex items-center gap-1.5 text-sm font-medium"><span data-icon="database"></span>Seus dados estão na nuvem</p>
+          <p class="mt-1 opacity-90">Tudo que você registra fica salvo na sua conta e aparece em qualquer aparelho em que você entrar.</p>
+        </div>
+        <div id="settings-local-tools" class="rounded-xl border border-slate-200/80 p-4 dark:border-slate-800/80">
           <p class="text-sm font-medium">Dados do navegador</p>
           <p class="mt-0.5 text-xs text-slate-500 dark:text-slate-400">Afeta só o armazenamento local deste navegador.</p>
           <div class="mt-3 flex flex-wrap gap-2">
@@ -323,6 +614,49 @@
   <!-- ===================== MODAL: OPEN FINANCE ===================== -->
   <dialog id="of-modal" class="modal max-w-md" aria-labelledby="of-title">
     <div id="of-modal-body"></div>
+  </dialog>
+
+
+  <!-- ===================== MODAL: BOAS-VINDAS (conta nova) ===================== -->
+  <dialog id="welcome-modal" class="modal max-w-md" aria-labelledby="welcome-title">
+    <div class="px-6 pb-4 pt-6 text-center">
+      <div class="mx-auto mb-4 grid h-12 w-12 place-items-center rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-lg"><span data-icon="sparkles" data-icon-class="h-5 w-5"></span></div>
+      <h3 id="welcome-title" class="text-base font-semibold">Bem-vindo(a) à sua conta!</h3>
+      <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">Sua conta ainda está vazia. Como você quer começar?</p>
+    </div>
+    <div class="space-y-2 px-6 pb-6">
+      <button type="button" id="welcome-import" class="hidden w-full rounded-xl border border-indigo-500/30 bg-indigo-500/10 p-4 text-left transition-all duration-300 hover:bg-indigo-500/15">
+        <p class="flex items-center gap-2 text-sm font-semibold text-indigo-700 dark:text-indigo-300"><span data-icon="hard-drive"></span>Trazer os dados deste navegador</p>
+        <p id="welcome-import-detail" class="mt-1 text-xs text-slate-600 dark:text-slate-400"></p>
+      </button>
+      <button type="button" id="welcome-empty" class="w-full rounded-xl border border-slate-200/80 p-4 text-left transition-all duration-300 hover:bg-slate-100/70 dark:border-slate-800/80 dark:hover:bg-slate-800/50">
+        <p class="flex items-center gap-2 text-sm font-semibold"><span data-icon="plus"></span>Começar do zero</p>
+        <p class="mt-1 text-xs text-slate-600 dark:text-slate-400">Você define seu saldo e orçamento e registra suas próprias transações.</p>
+      </button>
+      <p id="welcome-status" class="hidden pt-2 text-center text-xs text-slate-500"></p>
+    </div>
+  </dialog>
+
+  <!-- ===================== MODAL: NOVA SENHA ===================== -->
+  <dialog id="password-modal" class="modal max-w-md" aria-labelledby="password-title">
+    <form id="password-form" method="dialog" novalidate>
+      <header class="flex items-center justify-between border-b border-slate-200/80 px-6 py-4 dark:border-slate-800/80">
+        <div>
+          <h3 id="password-title" class="text-base font-semibold">Definir nova senha</h3>
+          <p class="text-xs text-slate-500 dark:text-slate-400">Mínimo de 6 caracteres</p>
+        </div>
+        <button type="button" class="btn-icon" data-close aria-label="Fechar"><span data-icon="x"></span></button>
+      </header>
+      <div class="space-y-4 px-6 py-5">
+        <div><label for="pw-new" class="field-label">Nova senha</label><input id="pw-new" type="password" autocomplete="new-password" class="input" /></div>
+        <div><label for="pw-confirm" class="field-label">Confirmar nova senha</label><input id="pw-confirm" type="password" autocomplete="new-password" class="input" /></div>
+        <p id="pw-error" class="hidden text-xs text-rose-500"></p>
+      </div>
+      <footer class="flex justify-end gap-2 border-t border-slate-200/80 px-6 py-4 dark:border-slate-800/80">
+        <button type="button" class="btn-ghost" data-close>Cancelar</button>
+        <button type="submit" id="pw-submit" class="btn-primary"><span data-icon="check"></span>Salvar senha</button>
+      </footer>
+    </form>
   </dialog>
 
   <!-- Toasts -->
