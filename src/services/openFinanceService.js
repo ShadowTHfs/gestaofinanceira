@@ -1,106 +1,57 @@
 // =============================================================================
-// SERVIÇO OPEN FINANCE — MODO SIMULAÇÃO
+// SERVIÇO OPEN FINANCE — Pluggy / Meu Pluggy (REAL)
 // -----------------------------------------------------------------------------
-// ⚠️ Nada aqui acessa banco real. Os dados retornados são fictícios e marcados
-// com provider: 'simulated'. Serve para deixar o app pronto para a integração.
+// O navegador NUNCA fala direto com a Pluggy: ele chama a Edge Function
+// "pluggy" do Supabase, que guarda o Client Secret e grava os dados com o
+// login do próprio usuário (RLS).
 //
-// Para ligar de verdade no futuro (via um agregador autorizado pelo Banco
-// Central, ex.: Pluggy ou Belvo), basta reescrever 3 funções mantendo as
-// mesmas assinaturas:
-//   connectBank(bankId)              → abre o widget de consentimento do provedor
-//   fetchExternalStatement(conn, p)  → chama o backend (Supabase Edge Function),
-//                                      que guarda as credenciais do provedor
-//   normalizeExternalTransaction()   → adapta o formato do provedor ao do app
-// As credenciais do provedor NUNCA devem ficar no navegador.
+// Requisitos: modo nuvem (Supabase + login), a função "pluggy" publicada e os
+// Secrets PLUGGY_CLIENT_ID, PLUGGY_CLIENT_SECRET e PLUGGY_ALLOWED_EMAILS.
 // =============================================================================
+import { getSupabase, getRepositoryStatus } from './supabaseClient.js';
 
-import { uid, delay, todayISO, ymOf, dateWithDay, dayOf, round2 } from '../utils.js';
+export const FUNCTION_NAME = 'pluggy';
 
-export const PROVIDER = 'simulated';
-
-export const SUPPORTED_BANKS = [
-  { id: 'nubank', name: 'Nubank', initials: 'Nu', tint: 'from-purple-500 to-fuchsia-600' },
-  { id: 'itau', name: 'Itaú', initials: 'It', tint: 'from-orange-400 to-amber-600' },
-  { id: 'bradesco', name: 'Bradesco', initials: 'Br', tint: 'from-rose-500 to-red-600' },
-];
-
-export const getBank = (id) => SUPPORTED_BANKS.find((b) => b.id === id);
-
-/** Simula o fluxo de consentimento e devolve a conexão criada. */
-export async function connectBank(bankId) {
-  if (!getBank(bankId)) throw new Error('Banco não suportado');
-  await delay(1300);
-  return {
-    id: uid(),
-    bankId,
-    status: 'connected',
-    provider: PROVIDER,
-    accountMask: `•••• ${String(1000 + Math.floor(Math.random() * 8999))}`,
-    connectedAt: new Date().toISOString(),
-    lastSyncAt: null,
-  };
+/** Erro amigável com um "code" para a interface decidir o que mostrar. */
+export class OpenFinanceError extends Error {
+  constructor(message, code = 'error') {
+    super(message);
+    this.code = code;
+  }
 }
 
-export async function disconnectBank(connection) {
-  await delay(400);
-  return { ...connection, status: 'disconnected' };
+async function invoke(body) {
+  const sb = getSupabase();
+  if (!sb || getRepositoryStatus().backend !== 'supabase') {
+    throw new OpenFinanceError('Entre com sua conta para usar o Open Finance.', 'local_mode');
+  }
+  const { data, error } = await sb.functions.invoke(FUNCTION_NAME, { body });
+  if (!error) return data;
+
+  // A função respondeu com erro (4xx/5xx): lê a mensagem que ela mandou.
+  const res = error.context;
+  if (res && typeof res.json === 'function') {
+    let payload = null;
+    try { payload = await res.clone().json(); } catch { /* sem JSON */ }
+    if (payload?.error) throw new OpenFinanceError(payload.error, payload.code || 'error');
+    if (res.status === 404) throw new OpenFinanceError('A função "pluggy" ainda não foi publicada no Supabase.', 'not_deployed');
+    throw new OpenFinanceError(`A função respondeu com erro ${res.status}.`, 'error');
+  }
+  // Não chegou a falar com a função (não existe, rede, CORS).
+  const msg = String(error.message || '');
+  if (/Failed to send|fetch|NetworkError|Load failed/i.test(msg)) {
+    throw new OpenFinanceError('Não consegui falar com a função "pluggy". Ela foi publicada no Supabase com esse nome?', 'not_deployed');
+  }
+  throw new OpenFinanceError(msg || 'Erro ao chamar a função.', 'error');
 }
 
-// Modelos de lançamentos fictícios por banco (dados brutos "como viriam da API").
-const TEMPLATES = {
-  nubank: [
-    { desc: 'Supermercado Bom Preço', amt: -187.4, mcc: 'grocery' },
-    { desc: 'Corrida por aplicativo', amt: -23.9, mcc: 'transport' },
-    { desc: 'Pix recebido · Cliente', amt: 350, mcc: 'transfer_in' },
-    { desc: 'Padaria Central', amt: -18.5, mcc: 'restaurant' },
-  ],
-  itau: [
-    { desc: 'Posto Avenida', amt: -160, mcc: 'fuel' },
-    { desc: 'Farmácia Saúde+', amt: -64.3, mcc: 'pharmacy' },
-    { desc: 'Rendimento poupança', amt: 21.37, mcc: 'interest' },
-  ],
-  bradesco: [
-    { desc: 'Restaurante Sabor da Terra', amt: -72.8, mcc: 'restaurant' },
-    { desc: 'Livraria Saber', amt: -89.9, mcc: 'education' },
-    { desc: 'Cinema Shopping', amt: -54, mcc: 'entertainment' },
-  ],
-};
+/** { configured, allowlistSet, allowed, email } */
+export const getStatus = () => invoke({ action: 'status' });
 
-const MCC_TO_CATEGORY = {
-  grocery: 'alimentacao', restaurant: 'alimentacao', transport: 'transporte', fuel: 'transporte',
-  pharmacy: 'saude', education: 'educacao', entertainment: 'lazer', transfer_in: 'outras_receitas', interest: 'investimentos',
-};
+/** Valida o Item ID na Pluggy, salva a conexão e importa contas e transações. */
+export const addItem = (itemId) => invoke({ action: 'add-item', itemId: String(itemId || '').trim() });
 
-/** Simula a busca do extrato do mês atual (até hoje). Retorna dados no formato do app. */
-export async function fetchExternalStatement(connection) {
-  await delay(1100);
-  const today = todayISO();
-  const ym = ymOf(today);
-  const maxDay = dayOf(today);
-  const raw = (TEMPLATES[connection.bankId] || []).map((t, i) => ({
-    id: `${connection.bankId}-${ym}-${i}`, // id estável → reimportar não duplica
-    description: t.desc,
-    amount: t.amt,
-    bookingDate: dateWithDay(ym, Math.max(1, Math.round(((i + 1) / 5) * maxDay))),
-    merchantCategory: t.mcc,
-  }));
-  return raw.map((r) => normalizeExternalTransaction(r, connection));
-}
+/** Atualiza contas e transações (todas as conexões ou uma). */
+export const sync = (connectionId) => invoke({ action: 'sync', ...(connectionId ? { connectionId } : {}) });
 
-/** Adaptador: formato do provedor → modelo interno de transação. */
-export function normalizeExternalTransaction(raw, connection) {
-  const isIncome = raw.amount > 0;
-  return {
-    id: uid(),
-    description: raw.description,
-    amount: round2(Math.abs(raw.amount)),
-    date: raw.bookingDate,
-    type: isIncome ? 'income' : 'expense',
-    category: MCC_TO_CATEGORY[raw.merchantCategory] || (isIncome ? 'outras_receitas' : 'outros'),
-    source: 'open_finance',
-    externalId: raw.id,
-    accountId: connection.id,
-    recurringId: null,
-    installment: null,
-  };
-}
+export const isUuid = (s) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(s || '').trim());

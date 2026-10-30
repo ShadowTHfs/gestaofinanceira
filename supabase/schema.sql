@@ -169,3 +169,46 @@ create policy "own_goals" on public.goals
 
 revoke all on public.categories, public.goals from anon;
 grant select, insert, update, delete on public.categories, public.goals to authenticated;
+
+-- =============================================================================
+-- v4 — Open Finance real via Pluggy / Meu Pluggy (ADITIVO)
+-- =============================================================================
+
+-- Conexão: guarda o Item ID da Pluggy e o nome da instituição
+alter table public.bank_connections add column if not exists external_item_id text;
+alter table public.bank_connections add column if not exists institution text;
+alter table public.bank_connections add column if not exists last_error text;
+create unique index if not exists bank_connections_user_item_uidx
+  on public.bank_connections (user_id, external_item_id) where external_item_id is not null;
+
+-- Contas e cartões vindos do banco (saldo, limite, fatura)
+create table if not exists public.bank_accounts (
+  id                text not null,                 -- id da conta na Pluggy
+  user_id           uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  connection_id     uuid not null references public.bank_connections(id) on delete cascade,
+  type              text not null,                 -- BANK | CREDIT
+  subtype           text,
+  name              text,
+  number            text,
+  balance           numeric(14, 2),
+  currency          text default 'BRL',
+  credit_limit      numeric(14, 2),
+  available_credit  numeric(14, 2),
+  bill_close_date   date,
+  bill_due_date     date,
+  minimum_payment   numeric(14, 2),
+  updated_at        timestamptz not null default now(),
+  primary key (user_id, id)
+);
+create index if not exists bank_accounts_conn_idx on public.bank_accounts (connection_id);
+
+-- Transação importada: de qual conta/cartão veio
+alter table public.transactions add column if not exists bank_account_id text;
+
+alter table public.bank_accounts enable row level security;
+drop policy if exists "own_bank_accounts" on public.bank_accounts;
+create policy "own_bank_accounts" on public.bank_accounts
+  for all to authenticated
+  using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
+revoke all on public.bank_accounts from anon;
+grant select, insert, update, delete on public.bank_accounts to authenticated;

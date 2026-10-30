@@ -27,6 +27,7 @@ const keysFor = (prefix) => ({
   connections: `${prefix}connections`,
   categories: `${prefix}categories`,
   goals: `${prefix}goals`,
+  bankAccounts: `${prefix}bank_accounts`,
   seeded: `${prefix}seeded`,
 });
 const LOCAL_KEYS = keysFor(LOCAL_PREFIX);
@@ -226,8 +227,9 @@ const txToRow = (t) => ({
   created_at: t.createdAt,
   items: t.items?.length ? t.items : null,
   status: t.status === 'pending' ? 'pending' : 'paid',
+  ...(t.bankAccountId ? { bank_account_id: t.bankAccountId } : {}),
 });
-const TX_NEW_FIELDS = ['items', 'status'];
+const TX_NEW_FIELDS = ['items', 'status', 'bank_account_id'];
 const rowToTx = (r) => ({
   id: r.id,
   description: r.description,
@@ -243,6 +245,7 @@ const rowToTx = (r) => ({
   createdAt: r.created_at,
   items: Array.isArray(r.items) ? r.items : null,
   status: r.status === 'pending' ? 'pending' : 'paid',
+  bankAccountId: r.bank_account_id ?? null,
 });
 const ruleToRow = (r) => ({
   id: r.id, user_id: userId, description: r.description, amount: r.amount, type: r.type, category: r.category,
@@ -274,6 +277,15 @@ const connToRow = (c) => ({
 const rowToConn = (r) => ({
   id: r.id, bankId: r.bank_id, status: r.status, accountMask: r.account_mask,
   provider: r.provider, connectedAt: r.connected_at, lastSyncAt: r.last_sync_at,
+  externalItemId: r.external_item_id ?? null, institution: r.institution ?? null, lastError: r.last_error ?? null,
+});
+const rowToBankAccount = (r) => ({
+  id: r.id, connectionId: r.connection_id, type: r.type, subtype: r.subtype, name: r.name, number: r.number,
+  balance: r.balance == null ? null : Number(r.balance), currency: r.currency,
+  creditLimit: r.credit_limit == null ? null : Number(r.credit_limit),
+  availableCredit: r.available_credit == null ? null : Number(r.available_credit),
+  billCloseDate: r.bill_close_date, billDueDate: r.bill_due_date,
+  minimumPayment: r.minimum_payment == null ? null : Number(r.minimum_payment), updatedAt: r.updated_at,
 });
 
 /** PostgREST devolve no máximo 1000 linhas por vez → busca em páginas. */
@@ -381,6 +393,13 @@ export async function deleteConnection(id) {
   );
 }
 
+// ---------------------------------------------------------------- contas bancárias (Open Finance)
+/** Só existem no modo nuvem (são gravadas pela Edge Function "pluggy"). */
+export function fetchBankAccounts() {
+  if (!remoteOn()) return Promise.resolve([]);
+  return read(async () => (await selectAll('bank_accounts')).map(rowToBankAccount), K.bankAccounts, []);
+}
+
 // ---------------------------------------------------------------- categorias personalizadas
 export function fetchCategories() {
   return read(async () => (await selectAll('categories')).map(rowToCat), K.categories, []);
@@ -446,7 +465,7 @@ export function getLocalSnapshot() {
  * Copia os dados locais para a conta logada.
  * Gera IDs novos (evita conflito se outra conta já importou os mesmos dados)
  * e refaz os vínculos de recorrência e parcelamento.
- * Transações vindas do Open Finance simulado NÃO são importadas.
+ * Transações vindas do Open Finance NÃO são copiadas (elas vêm do banco pela integração).
  */
 export async function importLocalToAccount() {
   if (!remoteOn()) throw new Error('Faça login antes de importar.');

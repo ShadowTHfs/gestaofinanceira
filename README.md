@@ -94,9 +94,11 @@ Se o banco ainda não tiver as colunas novas, o app continua salvando o básico 
 }
 ```
 
-## Open Finance
+## Open Finance (real) e login com Google
 
-`openFinanceService.js` é **simulado**: nenhum dado bancário real é acessado.
-Para ligar de verdade, use um agregador autorizado pelo Banco Central (ex.: Pluggy, Belvo) via **Supabase Edge Function**
-(as credenciais do provedor nunca ficam no navegador) e reescreva `connectBank`, `fetchExternalStatement` e
-`normalizeExternalTransaction`, mantendo as mesmas assinaturas.
+Integração real com a **Pluggy via Meu Pluggy** (gratuito, uso pessoal) e login com Google.
+Passo a passo completo em **`GUIA-PLUGGY.md`**.
+
+- `supabase/functions/pluggy/index.ts` — Edge Function (guarda o Client Secret; só fetch, sem dependências).
+- `src/services/openFinanceService.js` — chama a função a partir do app.
+- Tabelas: `bank_connections`, `bank_accounts`, `transactions.source = 'open_finance'`.

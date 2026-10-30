@@ -3,6 +3,7 @@
 // Só funciona quando o Supabase está configurado (ver env.js / Vercel).
 // =============================================================================
 import { getSupabase } from './supabaseClient.js';
+import { CONFIG } from '../config.js';
 
 const client = () => {
   const c = getSupabase();
@@ -22,6 +23,9 @@ export function authErrorMessage(error) {
   if (m.includes('signups not allowed')) return 'Novos cadastros estão desativados neste projeto.';
   if (m.includes('same password') || m.includes('different from the old')) return 'A nova senha precisa ser diferente da atual.';
   if (m.includes('failed to fetch') || m.includes('network')) return 'Sem conexão com o servidor. Verifique sua internet.';
+  if (m.includes('provider is not enabled') || m.includes('unsupported provider')) return 'O login com Google ainda não está ativado no Supabase (Authentication → Sign In / Providers → Google).';
+  if (m.includes('access_denied') || m.includes('access denied')) return 'Login com Google cancelado.';
+  if (m.includes('redirect') && m.includes('not allowed')) return 'Endereço de retorno não autorizado: adicione o site em Authentication → URL Configuration → Redirect URLs.';
   return 'Não foi possível concluir. Tente novamente.';
 }
 
@@ -69,6 +73,36 @@ export async function sendPasswordReset(email) {
 export async function updatePassword(password) {
   const { error } = await client().auth.updateUser({ password });
   if (error) throw error;
+}
+
+/** Quais logins sociais estão ativos no projeto (endpoint público do Supabase). */
+export async function getEnabledProviders() {
+  try {
+    const res = await fetch(`${CONFIG.supabaseUrl}/auth/v1/settings`, { headers: { apikey: CONFIG.supabaseAnonKey } });
+    if (!res.ok) return {};
+    const data = await res.json();
+    return data?.external || {};
+  } catch {
+    return {};
+  }
+}
+
+/** Redireciona para o Google; ao voltar, a sessão é detectada automaticamente. */
+export async function signInWithGoogle() {
+  const { error } = await client().auth.signInWithOAuth({
+    provider: 'google',
+    options: { redirectTo: window.location.origin, queryParams: { prompt: 'select_account' } },
+  });
+  if (error) throw error;
+}
+
+/** Erro devolvido na URL depois de voltar do Google (ex.: cancelou). Limpa a URL. */
+export function consumeAuthErrorFromUrl() {
+  const params = new URLSearchParams(`${window.location.search.slice(1)}&${window.location.hash.slice(1)}`);
+  const desc = params.get('error_description') || params.get('error');
+  if (!desc) return null;
+  window.history.replaceState({}, document.title, window.location.pathname);
+  return desc.replace(/\+/g, ' ');
 }
 
 export async function signOut() {

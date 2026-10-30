@@ -28,6 +28,8 @@ const state = {
   connections: [],
   categories: [],
   goals: [],
+  bankAccounts: [],
+  of: { status: null, error: null, loading: false },
   settings: { ...repo.DEFAULT_SETTINGS },
   filters: { type: 'all', search: '', category: 'all', source: 'all' },
   busy: new Set(),
@@ -103,13 +105,15 @@ async function enterAccount(user) {
     console.error(err);
     toast(err.message || 'Não foi possível acessar o banco.', 'error');
   }
+  // Open Finance: verifica a integração e atualiza os bancos se estiver desatualizado.
+  loadOpenFinanceStatus().then(autoSyncIfStale).catch((err) => console.warn('[open finance]', err));
 }
 
 function leaveAccount() {
   repo.clearUserCache();
   repo.setUser(null);
   currentUserId = null;
-  Object.assign(state, { transactions: [], recurring: [], connections: [], categories: [], goals: [], settings: { ...repo.DEFAULT_SETTINGS } });
+  Object.assign(state, { transactions: [], recurring: [], connections: [], categories: [], goals: [], bankAccounts: [], of: { status: null, error: null, loading: false }, settings: { ...repo.DEFAULT_SETTINGS } });
   setCustomCategories([]);
   $$('dialog[open]').forEach((d) => d.close());
   destroyAllCharts();
@@ -124,6 +128,8 @@ function showApp() {
   $('#app-main').classList.remove('hidden');
 }
 
+let socialChecked = false;
+
 function showAuthScreen() {
   $('#app-header').classList.add('hidden');
   $('#app-main').classList.add('hidden');
@@ -131,6 +137,30 @@ function showAuthScreen() {
   $('#auth-screen').classList.add('flex');
   setAuthMode('login');
   setTimeout(() => $('#auth-email').focus(), 50);
+  // Botão do Google só aparece se o provedor estiver ativo no Supabase.
+  if (!socialChecked) {
+    socialChecked = true;
+    auth.getEnabledProviders().then((p) => { window.__gfGoogle = Boolean(p.google); updateSocialVisibility(); });
+  }
+  const urlError = auth.consumeAuthErrorFromUrl();
+  if (urlError) authMessage(auth.authErrorMessage({ message: urlError }));
+}
+
+function updateSocialVisibility() {
+  $('#auth-social').classList.toggle('hidden', !(window.__gfGoogle && authMode !== 'forgot'));
+}
+
+async function startGoogleLogin() {
+  const btn = $('#auth-google');
+  btn.disabled = true;
+  btn.innerHTML = `${icon('loader-circle', 'h-4 w-4 animate-spin')}Abrindo o Google…`;
+  try {
+    await auth.signInWithGoogle(); // a página vai para o Google e volta logada
+  } catch (err) {
+    authMessage(auth.authErrorMessage(err));
+    btn.disabled = false;
+    btn.innerHTML = '<span class="grid h-5 w-5 place-items-center rounded-full bg-gradient-to-br from-sky-500 via-emerald-500 to-amber-400 text-[11px] font-black text-white">G</span>Continuar com Google';
+  }
 }
 
 function renderUserMenu(user) {
@@ -154,6 +184,7 @@ function setAuthMode(mode) {
   $('#auth-back').classList.toggle('hidden', mode !== 'forgot');
   $('#auth-password').setAttribute('autocomplete', mode === 'signup' ? 'new-password' : 'current-password');
   $('#auth-submit').textContent = { login: 'Entrar', signup: 'Criar conta', forgot: 'Enviar link de recuperação' }[mode];
+  updateSocialVisibility();
   $('#auth-subtitle').textContent = {
     login: 'Entre para ver seu painel financeiro',
     signup: 'Crie sua conta gratuita em segundos',
@@ -276,6 +307,7 @@ async function submitPassword(e) {
 
 function bindAuthEvents() {
   $('#auth-form').addEventListener('submit', submitAuth);
+  $('#auth-google').addEventListener('click', startGoogleLogin);
   $$('#auth-tabs [data-auth-tab]').forEach((b) => b.addEventListener('click', () => setAuthMode(b.dataset.authTab)));
   $('#auth-forgot').addEventListener('click', () => setAuthMode('forgot'));
   $('#auth-back').addEventListener('click', () => setAuthMode('login'));
@@ -314,11 +346,11 @@ async function persist(fn) {
 }
 
 async function loadAll() {
-  const [transactions, recurring, settings, connections, categories, goals] = await Promise.all([
+  const [transactions, recurring, settings, connections, categories, goals, bankAccounts] = await Promise.all([
     repo.fetchTransactions(), repo.fetchRecurring(), repo.fetchSettings(), repo.fetchConnections(),
-    repo.fetchCategories(), repo.fetchGoals(),
+    repo.fetchCategories(), repo.fetchGoals(), repo.fetchBankAccounts(),
   ]);
-  Object.assign(state, { transactions, recurring, settings, connections, categories, goals });
+  Object.assign(state, { transactions, recurring, settings, connections, categories, goals, bankAccounts });
   setCustomCategories(categories);
 }
 
@@ -619,8 +651,9 @@ function txRow(t) {
   if (t.items?.length) tags.push(`<button type="button" data-toggle-items="${t.id}" class="badge bg-slate-500/10 text-slate-600 ring-slate-500/20 transition-colors hover:bg-slate-500/20 dark:text-slate-300" aria-expanded="false">${icon('list', 'h-3 w-3')}${t.items.length} ${t.items.length === 1 ? 'item' : 'itens'}</button>`);
   if (t.source === 'open_finance') {
     const conn = state.connections.find((c) => c.id === t.accountId);
-    const bank = conn && openFinance.getBank(conn.bankId);
-    tags.push(`<span class="badge bg-indigo-500/10 text-indigo-600 ring-indigo-500/20 dark:text-indigo-300">${icon('landmark', 'h-3 w-3')}${bank ? bank.name : 'Open Finance'}</span>`);
+    const acc = t.bankAccountId && state.bankAccounts.find((a) => a.id === t.bankAccountId);
+    const label = conn?.institution ? conn.institution.replace(/^meu ?pluggy\s*[·\-:]\s*/i, '') : 'Open Finance';
+    tags.push(`<span class="badge bg-indigo-500/10 text-indigo-600 ring-indigo-500/20 dark:text-indigo-300" title="Importada do banco">${icon(acc?.type === 'CREDIT' ? 'credit-card' : 'landmark', 'h-3 w-3')}${escapeHTML(label)}</span>`);
   }
   const canPay = planned && (t.status === 'pending' || t.projected);
   const itemsDetail = t.items?.length
@@ -820,104 +853,244 @@ async function payTx(id) {
   renderAll();
 }
 
-// ------------------------------------------------------------------ Open Finance
-function renderOpenFinance() {
-  $('#of-list').innerHTML = openFinance.SUPPORTED_BANKS.map((b) => {
-    const conn = state.connections.find((c) => c.bankId === b.id && c.status === 'connected');
-    const busy = state.busy.has(b.id);
-    const imported = conn ? state.transactions.filter((t) => t.accountId === conn.id).length : 0;
-    return `<div class="flex items-center gap-3 rounded-xl border border-slate-200/80 bg-white/50 p-3 transition-all duration-300 hover:border-slate-300 dark:border-slate-800/80 dark:bg-slate-950/30 dark:hover:border-slate-700">
-      <div class="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-gradient-to-br ${b.tint} text-sm font-bold text-white shadow-md">${b.initials}</div>
-      <div class="min-w-0 flex-1">
-        <p class="text-sm font-medium">${b.name}</p>
-        <p class="truncate text-[11px] ${conn ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-500 dark:text-slate-400'}">
-          ${conn ? `● Conectado ${conn.accountMask} · ${imported} importadas` : 'Não conectado'}</p>
-      </div>
-      ${conn
-        ? `<div class="flex gap-1">
-            <button type="button" class="btn-icon h-8 w-8" data-of-sync="${b.id}" title="Sincronizar extrato" aria-label="Sincronizar ${b.name}" ${busy ? 'disabled' : ''}>${icon(busy ? 'loader-circle' : 'refresh-cw', `h-4 w-4 ${busy ? 'animate-spin' : ''}`)}</button>
-            <button type="button" class="btn-icon h-8 w-8" data-of-disconnect="${b.id}" title="Desconectar" aria-label="Desconectar ${b.name}">${icon('unplug', 'h-4 w-4')}</button>
-          </div>`
-        : `<button type="button" class="btn-ghost px-3 py-1.5 text-xs" data-of-connect="${b.id}">${icon('link', 'h-3.5 w-3.5')}Conectar</button>`}
-    </div>`;
-  }).join('');
-}
+// ------------------------------------------------------------------ Open Finance (Pluggy / Meu Pluggy — real)
+// state.of = { status: null | {...}, error: null | {message, code}, loading: bool }
+const OF_STEPS = `
+  <ol class="space-y-2 text-xs leading-relaxed text-slate-600 dark:text-slate-300">
+    <li><strong>1.</strong> Em <a class="font-medium text-indigo-600 underline dark:text-indigo-400" href="https://meu.pluggy.ai" target="_blank" rel="noopener">meu.pluggy.ai</a>, crie sua conta e conecte seus bancos (autoriza no app do banco).</li>
+    <li><strong>2.</strong> No <a class="font-medium text-indigo-600 underline dark:text-indigo-400" href="https://dashboard.pluggy.ai" target="_blank" rel="noopener">Dashboard da Pluggy</a> (mesmo login): <em>Applications → sua aplicação → Demo → Connect Account</em> e escolha o conector <strong>MeuPluggy</strong> (não o banco, nem o Sandbox).</li>
+    <li><strong>3.</strong> Em <em>Connected Items</em>, abra cada banco e copie o <strong>Item ID</strong>. Cole aqui no app.</li>
+  </ol>`;
 
-function openConsent(bankId) {
-  const bank = openFinance.getBank(bankId);
-  const modal = $('#of-modal');
-  const body = $('#of-modal-body');
-  body.innerHTML = `
-    <div class="px-6 pb-2 pt-6 text-center">
-      <div class="mx-auto mb-4 flex items-center justify-center gap-3">
-        <div class="grid h-12 w-12 place-items-center rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-lg">${icon('wallet', 'h-5 w-5')}</div>
-        <span class="text-slate-400">${icon('link', 'h-4 w-4')}</span>
-        <div class="grid h-12 w-12 place-items-center rounded-2xl bg-gradient-to-br ${bank.tint} font-bold text-white shadow-lg">${bank.initials}</div>
-      </div>
-      <h3 id="of-title" class="text-base font-semibold">Conectar ${bank.name}</h3>
-      <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">Você será redirecionado ao ${bank.name} para autorizar o compartilhamento.</p>
-      <span class="badge mt-3 bg-amber-500/10 text-amber-600 ring-amber-500/30 dark:text-amber-300">${icon('triangle-alert', 'h-3 w-3')}Simulação — nenhum dado real será acessado</span>
-      ${repo.getRepositoryStatus().backend === 'supabase' ? `<p class="mt-3 rounded-xl bg-amber-500/10 px-3 py-2 text-left text-[11px] leading-relaxed text-amber-800 dark:text-amber-200">As transações de exemplo serão gravadas na sua conta. Para removê-las depois, desconecte o banco e escolha excluir as importadas.</p>` : ''}
-    </div>
-    <div class="px-6 py-4">
-      <p class="mb-2 text-xs font-medium text-slate-600 dark:text-slate-300">Dados que seriam compartilhados:</p>
-      <ul class="space-y-2 text-sm">
-        ${['Dados cadastrais', 'Saldos das contas', 'Extratos e transações (últimos 12 meses)'].map((x) => `<li class="flex items-center gap-2">${icon('circle-check', 'h-4 w-4 text-emerald-500')}${x}</li>`).join('')}
-      </ul>
-      <p class="mt-3 flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400">${icon('lock', 'h-3 w-3')}Consentimento válido por 12 meses, revogável a qualquer momento.</p>
-    </div>
-    <div id="of-progress" class="hidden px-6 pb-2"></div>
-    <footer class="flex justify-end gap-2 border-t border-slate-200/80 px-6 py-4 dark:border-slate-800/80">
-      <button type="button" class="btn-ghost" data-close>Cancelar</button>
-      <button type="button" class="btn-primary" id="of-authorize">${icon('shield-check')}Autorizar (simulação)</button>
-    </footer>`;
-  modal.showModal();
-
-  $('#of-authorize').addEventListener('click', async (e) => {
-    const btn = e.currentTarget;
-    btn.disabled = true;
-    btn.innerHTML = `${icon('loader-circle', 'h-4 w-4 animate-spin')}Conectando…`;
-    const prog = $('#of-progress');
-    prog.classList.remove('hidden');
-    const step = (txt, done) => `<p class="flex items-center gap-2 py-1 text-xs ${done ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-500 dark:text-slate-400'}">${icon(done ? 'circle-check' : 'loader-circle', `h-3.5 w-3.5 ${done ? '' : 'animate-spin'}`)}${txt}</p>`;
-    try {
-      prog.innerHTML = step('Validando consentimento…');
-      const conn = await openFinance.connectBank(bankId);
-      await repo.saveConnection(conn);
-      state.connections = [...state.connections.filter((c) => c.bankId !== bankId), conn];
-      prog.innerHTML = step('Consentimento autorizado', true) + step('Importando extrato…');
-      const imported = await syncConnection(conn, { silent: true });
-      prog.innerHTML = step('Consentimento autorizado', true) + step(`${imported} transações importadas`, true);
-      setTimeout(() => modal.close(), 700);
-      toast(`${bank.name} conectado (simulação) · ${imported} transações importadas`, 'success');
-    } catch (err) {
-      console.error(err);
-      toast(`Não foi salvo: ${err.message || 'falha na conexão simulada'}`, 'error');
-      modal.close();
-    }
-    renderAll();
-  });
-}
-
-async function syncConnection(conn, { silent = false } = {}) {
-  state.busy.add(conn.bankId);
+async function loadOpenFinanceStatus({ force = false } = {}) {
+  if (repo.getRepositoryStatus().backend !== 'supabase') return;
+  if (state.of.loading || (state.of.status && !force)) return;
+  state.of.loading = true;
   renderOpenFinance();
   try {
-    const incoming = await openFinance.fetchExternalStatement(conn);
-    const known = new Set(state.transactions.map((t) => t.externalId).filter(Boolean));
-    const fresh = incoming.filter((t) => !known.has(t.externalId));
-    if (fresh.length) {
-      const saved = await repo.saveTransactions(fresh);
-      state.transactions.push(...saved);
-    }
-    const updated = { ...conn, lastSyncAt: new Date().toISOString() };
-    await repo.saveConnection(updated);
-    state.connections = state.connections.map((c) => (c.id === conn.id ? updated : c));
-    if (!silent) toast(fresh.length ? `${fresh.length} novas transações importadas` : 'Extrato já está em dia', fresh.length ? 'success' : 'info');
-    return fresh.length;
+    state.of.status = await openFinance.getStatus();
+    state.of.error = null;
+  } catch (err) {
+    state.of.status = null;
+    state.of.error = { message: err.message, code: err.code };
   } finally {
-    state.busy.delete(conn.bankId);
+    state.of.loading = false;
+    renderOpenFinance();
   }
+}
+
+const ofReady = () => state.of.status?.configured && state.of.status?.allowlistSet && state.of.status?.allowed;
+
+function bankLogo(name) {
+  const n = String(name || 'Banco').replace(/^meu ?pluggy\s*[·\-:]\s*/i, '');
+  const initials = n.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase() || 'B';
+  return `<div class="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 text-sm font-bold text-white shadow-md">${escapeHTML(initials)}</div>`;
+}
+
+function renderOpenFinance() {
+  const box = $('#of-list');
+  const badge = $('#of-badge');
+  const cloud = repo.getRepositoryStatus().backend === 'supabase';
+  badge.textContent = 'Meu Pluggy · grátis';
+
+  if (!cloud) {
+    box.innerHTML = `<div class="rounded-xl border border-dashed border-slate-300/70 p-4 text-xs leading-relaxed text-slate-600 dark:border-slate-700/70 dark:text-slate-300">
+      ${icon('lock', 'mb-2 h-5 w-5 text-indigo-500')}
+      A conexão com bancos reais funciona no <strong>modo nuvem</strong> (Supabase com login), porque precisa de um servidor seguro para guardar a chave da Pluggy.</div>`;
+    return;
+  }
+  if (state.of.loading && !state.of.status) {
+    box.innerHTML = '<div class="space-y-2"><div class="skeleton h-14"></div><div class="skeleton h-14"></div></div>';
+    return;
+  }
+  if (state.of.error) {
+    const notDeployed = state.of.error.code === 'not_deployed';
+    box.innerHTML = `<div class="space-y-3 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 text-xs leading-relaxed text-amber-900 dark:text-amber-100">
+      <p class="flex items-start gap-2 font-medium">${icon('triangle-alert', 'mt-0.5 h-4 w-4 shrink-0')}${escapeHTML(state.of.error.message)}</p>
+      ${notDeployed ? '<p>Siga o passo a passo do arquivo <strong>GUIA-PLUGGY.md</strong> para publicar a função <code>pluggy</code> no Supabase.</p>' : ''}
+      <button type="button" class="btn-ghost px-3 py-1.5 text-xs" data-of-retry>${icon('refresh-cw', 'h-3.5 w-3.5')}Tentar de novo</button></div>`;
+    return;
+  }
+  const st = state.of.status;
+  if (st && !ofReady()) {
+    const msg = !st.configured
+      ? 'Faltam os Secrets <code>PLUGGY_CLIENT_ID</code> e <code>PLUGGY_CLIENT_SECRET</code> na função do Supabase.'
+      : !st.allowlistSet
+        ? `Falta o Secret <code>PLUGGY_ALLOWED_EMAILS</code> com o seu e-mail (<strong>${escapeHTML(st.email || '')}</strong>).`
+        : `Esta conta (<strong>${escapeHTML(st.email || '')}</strong>) não está na lista de e-mails autorizados. O Meu Pluggy é de uso pessoal.`;
+    box.innerHTML = `<div class="space-y-3 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 text-xs leading-relaxed text-amber-900 dark:text-amber-100">
+      <p class="flex items-start gap-2">${icon('triangle-alert', 'mt-0.5 h-4 w-4 shrink-0')}<span>${msg}</span></p>
+      <button type="button" class="btn-ghost px-3 py-1.5 text-xs" data-of-retry>${icon('refresh-cw', 'h-3.5 w-3.5')}Verificar de novo</button></div>`;
+    return;
+  }
+
+  const conns = state.connections.filter((c) => c.externalItemId);
+  const accounts = state.bankAccounts;
+  const bankTotal = sum(accounts.filter((a) => a.type === 'BANK'), (a) => a.balance || 0);
+  const cardTotal = sum(accounts.filter((a) => a.type === 'CREDIT'), (a) => Math.abs(a.balance || 0));
+  const timeAgo = (iso) => {
+    if (!iso) return 'nunca sincronizado';
+    const min = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+    if (min < 1) return 'agora mesmo';
+    if (min < 60) return `há ${min} min`;
+    if (min < 1440) return `há ${Math.round(min / 60)} h`;
+    return `há ${Math.round(min / 1440)} dia(s)`;
+  };
+
+  const connHtml = conns.map((c) => {
+    const busy = state.busy.has(c.id);
+    const accs = accounts.filter((a) => a.connectionId === c.id);
+    const n = state.transactions.filter((t) => t.accountId === c.id).length;
+    const ok = c.status === 'connected' && !c.lastError;
+    return `<div class="rounded-xl border border-slate-200/80 bg-white/50 p-3 transition-all duration-300 hover:border-slate-300 dark:border-slate-800/80 dark:bg-slate-950/30 dark:hover:border-slate-700">
+      <div class="flex items-center gap-3">
+        ${bankLogo(c.institution)}
+        <div class="min-w-0 flex-1">
+          <p class="truncate text-sm font-medium">${escapeHTML(c.institution || 'Banco')}</p>
+          <p class="truncate text-[11px] ${ok ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500 dark:text-rose-300'}">${ok ? '●' : '⚠'} ${busy ? 'sincronizando…' : `${timeAgo(c.lastSyncAt)} · ${n} transações`}</p>
+        </div>
+        <div class="flex gap-1">
+          <button type="button" class="btn-icon h-8 w-8" data-of-sync="${c.id}" title="Sincronizar agora" aria-label="Sincronizar ${escapeHTML(c.institution || '')}" ${busy ? 'disabled' : ''}>${icon(busy ? 'loader-circle' : 'refresh-cw', `h-4 w-4 ${busy ? 'animate-spin' : ''}`)}</button>
+          <button type="button" class="btn-icon h-8 w-8" data-of-disconnect="${c.id}" title="Remover conexão" aria-label="Remover ${escapeHTML(c.institution || '')}">${icon('unplug', 'h-4 w-4')}</button>
+        </div>
+      </div>
+      ${c.lastError ? `<p class="mt-2 rounded-lg bg-rose-500/10 px-2.5 py-1.5 text-[11px] leading-relaxed text-rose-700 dark:text-rose-300">${escapeHTML(c.lastError)}</p>` : ''}
+      ${accs.length ? `<ul class="mt-2 space-y-1 border-t border-slate-200/70 pt-2 dark:border-slate-800/70">${accs.map((a) => a.type === 'CREDIT'
+        ? `<li class="flex items-center justify-between gap-2 text-xs"><span class="flex min-w-0 items-center gap-1.5 truncate text-slate-600 dark:text-slate-300">${icon('credit-card', 'h-3.5 w-3.5 shrink-0')}<span class="truncate">${escapeHTML(a.name || 'Cartão')}</span></span>
+            <span class="shrink-0 text-right tabular-nums"><span class="font-semibold text-rose-500 dark:text-rose-300">${fmt(Math.abs(a.balance || 0))}</span>${a.billDueDate ? `<span class="block text-[10px] text-slate-500">vence ${shortDate(a.billDueDate)}${a.availableCredit != null ? ` · disp. ${fmt(a.availableCredit)}` : ''}</span>` : ''}</span></li>`
+        : `<li class="flex items-center justify-between gap-2 text-xs"><span class="flex min-w-0 items-center gap-1.5 truncate text-slate-600 dark:text-slate-300">${icon('landmark', 'h-3.5 w-3.5 shrink-0')}<span class="truncate">${escapeHTML(a.name || 'Conta')}</span></span><span class="shrink-0 font-semibold tabular-nums">${fmt(a.balance || 0)}</span></li>`).join('')}</ul>` : ''}
+    </div>`;
+  }).join('');
+
+  box.innerHTML = `
+    ${accounts.length ? `<div class="grid grid-cols-2 gap-2">
+      <div class="rounded-xl bg-emerald-500/10 p-3"><p class="text-[11px] font-medium text-emerald-700 dark:text-emerald-300">Saldo nos bancos</p><p class="text-base font-bold tabular-nums">${fmt(bankTotal)}</p></div>
+      <div class="rounded-xl bg-rose-500/10 p-3"><p class="text-[11px] font-medium text-rose-700 dark:text-rose-300">Faturas dos cartões</p><p class="text-base font-bold tabular-nums">${fmt(cardTotal)}</p></div>
+    </div>` : ''}
+    ${connHtml || `<div class="rounded-xl border border-dashed border-slate-300/70 p-4 dark:border-slate-700/70">
+      <p class="mb-2 text-sm font-medium">Conecte seus bancos de verdade</p>${OF_STEPS}</div>`}
+    <div class="flex gap-2">
+      <button type="button" class="btn-primary flex-1 py-2 text-xs" data-of-add ${conns.length >= 5 ? 'disabled title="O Meu Pluggy permite até 5 conexões"' : ''}>${icon('plus', 'h-3.5 w-3.5')}Adicionar conexão</button>
+      ${conns.length > 1 ? `<button type="button" class="btn-ghost px-3 text-xs" data-of-sync-all title="Sincronizar todas">${icon('refresh-cw', 'h-3.5 w-3.5')}Todas</button>` : ''}
+    </div>`;
+}
+
+function openAddConnection() {
+  const modal = $('#of-modal');
+  $('#of-modal-body').innerHTML = `
+    <form id="of-add-form" novalidate>
+      <header class="flex items-center justify-between border-b border-slate-200/80 px-6 py-4 dark:border-slate-800/80">
+        <div>
+          <h3 id="of-title" class="text-base font-semibold">Adicionar conexão do Meu Pluggy</h3>
+          <p class="text-xs text-slate-500 dark:text-slate-400">Seus dados bancários reais, de forma segura</p>
+        </div>
+        <button type="button" class="btn-icon" data-close aria-label="Fechar">${icon('x')}</button>
+      </header>
+      <div class="space-y-4 px-6 py-5">
+        <div class="rounded-xl bg-slate-100/70 p-4 dark:bg-slate-950/50">${OF_STEPS}</div>
+        <div>
+          <label for="of-item-id" class="field-label">Item ID</label>
+          <input id="of-item-id" class="input font-mono text-sm" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" autocomplete="off" spellcheck="false" />
+          <p id="of-add-error" class="mt-1 hidden text-xs text-rose-500"></p>
+        </div>
+        <p class="flex items-start gap-1.5 text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">${icon('shield-check', 'mt-px h-3.5 w-3.5 shrink-0')}O app só <strong>lê</strong> dados (saldos, cartões e transações dos últimos 12 meses). Ele não faz pagamentos nem transferências.</p>
+        <div id="of-progress" class="hidden"></div>
+      </div>
+      <footer class="flex justify-end gap-2 border-t border-slate-200/80 px-6 py-4 dark:border-slate-800/80">
+        <button type="button" class="btn-ghost" data-close>Cancelar</button>
+        <button type="submit" class="btn-primary" id="of-add-submit">${icon('link')}Conectar e importar</button>
+      </footer>
+    </form>`;
+  modal.showModal();
+  setTimeout(() => $('#of-item-id').focus(), 50);
+  $('#of-add-form').addEventListener('submit', submitAddConnection);
+}
+
+async function submitAddConnection(e) {
+  e.preventDefault();
+  const itemId = $('#of-item-id').value.trim();
+  const err = $('#of-add-error');
+  const showErr = (m) => { err.textContent = m; err.classList.toggle('hidden', !m); $('#of-item-id').classList.toggle('input-error', Boolean(m)); };
+  if (!openFinance.isUuid(itemId)) return showErr('O Item ID tem o formato xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx (copie do Dashboard da Pluggy).');
+  showErr('');
+  const btn = $('#of-add-submit');
+  btn.disabled = true;
+  btn.innerHTML = `${icon('loader-circle', 'h-4 w-4 animate-spin')}Importando…`;
+  const prog = $('#of-progress');
+  prog.classList.remove('hidden');
+  prog.innerHTML = `<p class="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">${icon('loader-circle', 'h-3.5 w-3.5 animate-spin')}Validando na Pluggy e buscando até 12 meses de transações… pode levar até 1 minuto.</p>`;
+  try {
+    const res = await openFinance.addItem(itemId);
+    await reloadBankData();
+    $('#of-modal').close();
+    const r = res.result || {};
+    toast(`${r.institution || 'Banco'} conectado · ${r.accounts || 0} conta(s) · ${r.imported || 0} transações importadas`, 'success');
+    if (r.error) toast(r.error, 'error');
+  } catch (ex) {
+    showErr(ex.message);
+    prog.classList.add('hidden');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = `${icon('link')}Conectar e importar`;
+  }
+}
+
+/** Recarrega conexões, contas e transações do banco depois de uma sincronização. */
+async function reloadBankData() {
+  const [transactions, connections, bankAccounts] = await Promise.all([
+    repo.fetchTransactions(), repo.fetchConnections(), repo.fetchBankAccounts(),
+  ]);
+  Object.assign(state, { transactions, connections, bankAccounts });
+  renderAll();
+}
+
+async function runSync(connectionId, { silent = false } = {}) {
+  const ids = connectionId ? [connectionId] : state.connections.filter((c) => c.externalItemId).map((c) => c.id);
+  ids.forEach((id) => state.busy.add(id));
+  renderOpenFinance();
+  try {
+    const res = await openFinance.sync(connectionId);
+    await reloadBankData();
+    const results = res.results || [];
+    const errors = results.filter((r) => r.error);
+    if (!silent || errors.length) {
+      const total = sum(results, (r) => r.imported || 0);
+      if (!silent) toast(`Sincronizado · ${total} transações conferidas`, 'success');
+      errors.forEach((r) => toast(`${r.institution || 'Banco'}: ${r.error}`, 'error'));
+    }
+  } catch (err) {
+    toast(`Não foi possível sincronizar: ${err.message}`, 'error');
+  } finally {
+    ids.forEach((id) => state.busy.delete(id));
+    renderOpenFinance();
+  }
+}
+
+/** Ao entrar: se a última sincronização tem mais de 12 h, atualiza em segundo plano. */
+async function autoSyncIfStale() {
+  const conns = state.connections.filter((c) => c.externalItemId);
+  if (!conns.length || !ofReady()) return;
+  const stale = conns.some((c) => !c.lastSyncAt || Date.now() - new Date(c.lastSyncAt).getTime() > 12 * 3600 * 1000);
+  if (stale) await runSync(null, { silent: true });
+}
+
+async function removeConnection(id) {
+  const conn = state.connections.find((c) => c.id === id);
+  if (!conn || !window.confirm(`Remover a conexão "${conn.institution || 'Banco'}" do app?\n\n(Isso não revoga a autorização no Meu Pluggy — para isso, use o meu.pluggy.ai.)`)) return;
+  const imported = state.transactions.filter((t) => t.accountId === conn.id).map((t) => t.id);
+  const removeToo = imported.length > 0 && window.confirm(`Excluir também as ${imported.length} transações importadas desse banco?\n\nOK = excluir · Cancelar = manter no histórico`);
+  const ok = await persist(async () => {
+    if (removeToo) await repo.deleteTransactions(imported);
+    await repo.deleteConnection(conn.id); // contas desse banco saem junto (cascade)
+    return true;
+  });
+  if (!ok) return;
+  if (removeToo) state.transactions = state.transactions.filter((t) => !imported.includes(t.id));
+  else state.transactions = state.transactions.map((t) => (t.accountId === conn.id ? { ...t, accountId: null } : t));
+  state.connections = state.connections.filter((c) => c.id !== conn.id);
+  state.bankAccounts = state.bankAccounts.filter((a) => a.connectionId !== conn.id);
+  toast(removeToo ? 'Conexão e transações removidas' : 'Conexão removida', 'info');
+  renderAll();
 }
 
 // ------------------------------------------------------------------ modal de transação
@@ -1516,7 +1689,7 @@ function bindEvents() {
 
   // Ações delegadas (lista, estados vazios, recorrências, Open Finance)
   document.addEventListener('click', async (e) => {
-    const el = e.target.closest('[data-delete],[data-delete-rule],[data-open-new],[data-clear-filters],[data-of-connect],[data-of-sync],[data-of-disconnect],[data-close],[data-pay],[data-toggle-items],[data-edit-cat],[data-del-cat],[data-deposit-goal],[data-edit-goal],[data-new-goal],[data-remove-item]');
+    const el = e.target.closest('[data-delete],[data-delete-rule],[data-open-new],[data-clear-filters],[data-of-add],[data-of-retry],[data-of-sync-all],[data-of-sync],[data-of-disconnect],[data-close],[data-pay],[data-toggle-items],[data-edit-cat],[data-del-cat],[data-deposit-goal],[data-edit-goal],[data-new-goal],[data-remove-item]');
     if (!el) return;
 
     if (el.dataset.pay) { el.disabled = true; await payTx(el.dataset.pay); return; }
@@ -1567,30 +1740,11 @@ function bindEvents() {
       renderAll();
       return;
     }
-    if (el.dataset.ofConnect) { openConsent(el.dataset.ofConnect); return; }
-    if (el.dataset.ofSync) {
-      const conn = state.connections.find((c) => c.bankId === el.dataset.ofSync && c.status === 'connected');
-      if (conn) { await persist(() => syncConnection(conn)); renderAll(); }
-      return;
-    }
-    if (el.dataset.ofDisconnect) {
-      const conn = state.connections.find((c) => c.bankId === el.dataset.ofDisconnect && c.status === 'connected');
-      if (!conn || !window.confirm('Desconectar este banco?')) return;
-      const imported = state.transactions.filter((t) => t.accountId === conn.id).map((t) => t.id);
-      const removeToo = imported.length > 0 && window.confirm(`Excluir também as ${imported.length} transações importadas deste banco? (Elas são fictícias, da simulação.)\n\nOK = excluir · Cancelar = manter`);
-      const ok = await persist(async () => {
-        if (removeToo) await repo.deleteTransactions(imported);
-        await openFinance.disconnectBank(conn);
-        await repo.deleteConnection(conn.id);
-        return true;
-      });
-      if (!ok) return;
-      if (removeToo) state.transactions = state.transactions.filter((t) => !imported.includes(t.id));
-      else state.transactions = state.transactions.map((t) => (t.accountId === conn.id ? { ...t, accountId: null } : t));
-      state.connections = state.connections.filter((c) => c.id !== conn.id);
-      toast(removeToo ? 'Banco desconectado e transações removidas' : 'Banco desconectado', 'info');
-      renderAll();
-    }
+    if (el.hasAttribute('data-of-add')) { openAddConnection(); return; }
+    if (el.hasAttribute('data-of-retry')) { state.of.error = null; await loadOpenFinanceStatus({ force: true }); return; }
+    if (el.dataset.ofSync) { await runSync(el.dataset.ofSync); return; }
+    if (el.hasAttribute('data-of-sync-all')) { await runSync(null); return; }
+    if (el.dataset.ofDisconnect) { await removeConnection(el.dataset.ofDisconnect); }
   });
 
   // Modal de transação

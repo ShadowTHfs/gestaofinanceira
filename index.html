@@ -76,6 +76,13 @@
           <div id="auth-message" class="hidden rounded-xl px-3 py-2.5 text-xs leading-relaxed"></div>
 
           <button id="auth-submit" type="submit" class="btn-primary w-full py-3">Entrar</button>
+          <div id="auth-social" class="hidden space-y-3">
+            <div class="flex items-center gap-3 text-[11px] uppercase tracking-wider text-slate-400"><span class="h-px flex-1 bg-slate-200 dark:bg-slate-800"></span>ou<span class="h-px flex-1 bg-slate-200 dark:bg-slate-800"></span></div>
+            <button id="auth-google" type="button" class="btn-ghost w-full py-3 text-sm font-semibold">
+              <span class="grid h-5 w-5 place-items-center rounded-full bg-gradient-to-br from-sky-500 via-emerald-500 to-amber-400 text-[11px] font-black text-white">G</span>
+              Continuar com Google
+            </button>
+          </div>
           <button type="button" id="auth-back" class="hidden w-full text-center text-xs font-medium text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white">← Voltar para o login</button>
         </form>
       </div>
@@ -272,15 +279,15 @@
           <div aria-hidden="true" class="pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full bg-gradient-to-br from-indigo-500/30 to-violet-600/20 blur-2xl"></div>
           <header class="relative mb-3 flex items-start justify-between gap-2">
             <div>
-              <h2 class="card-title flex items-center gap-2"><span data-icon="landmark" class="text-indigo-500"></span>Conexões Open Finance</h2>
-              <p class="card-sub mt-0.5">Importe extratos automaticamente</p>
+              <h2 class="card-title flex items-center gap-2"><span data-icon="landmark" class="text-indigo-500"></span>Open Finance</h2>
+              <p class="card-sub mt-0.5">Seus bancos e cartões reais, via Pluggy</p>
             </div>
-            <span class="badge bg-amber-500/10 text-amber-600 ring-amber-500/30 dark:text-amber-300">Simulação</span>
+            <span id="of-badge" class="badge bg-emerald-500/10 text-emerald-600 ring-emerald-500/30 dark:text-emerald-300">Meu Pluggy</span>
           </header>
           <div id="of-list" class="relative space-y-2"></div>
           <p class="relative mt-3 flex items-start gap-1.5 text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
             <span data-icon="shield-check" data-icon-class="mt-px h-3.5 w-3.5 shrink-0"></span>
-            Modo demonstração: nenhum dado bancário real é acessado. A arquitetura já está pronta para um provedor oficial.
+            Somente leitura. A chave da Pluggy fica no servidor (Supabase), nunca no navegador. Atualiza sozinho a cada 12 h ao abrir o app.
           </p>
         </article>
       </div>

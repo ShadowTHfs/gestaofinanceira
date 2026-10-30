@@ -12,10 +12,23 @@
 - [x] Parte 1 — Categorias personalizadas, itens na compra, pagamentos agendados e séries (semanal/mensal/anual)
 - [x] Parte 2 — Metas com calculadora (quanto guardar por mês / em quanto tempo)
 - [ ] Parte 3 — Assistente financeira com regras próprias (sem IA externa por enquanto)
-- [ ] Parte 4 — Open Finance real com Pluggy (Edge Functions no Supabase + Pluggy Connect), começando pelo Sandbox
-      · Confirmar com a Pluggy se o "Meu Pluggy" pode ser usado gratuitamente no seu caso
+- [x] Parte 4 — Open Finance real via Meu Pluggy (Edge Function "pluggy") — ver GUIA-PLUGGY.md
+- [x] Login com Google — ver GUIA-PLUGGY.md, Parte D
+
+## Para ativar a Parte 4 e o Google (fazer uma vez)
+- [ ] Rodar o schema.sql (v4) no SQL Editor
+- [ ] Publicar a Edge Function "pluggy" + Secrets PLUGGY_CLIENT_ID, PLUGGY_CLIENT_SECRET, PLUGGY_ALLOWED_EMAILS
+- [ ] Conectar bancos no meu.pluggy.ai e colar os Item IDs no app
+- [ ] Google Cloud: ID do cliente OAuth + ativar provedor Google no Supabase
+
+## Atenção
+- Meu Pluggy: uso pessoal, até 5 conexões, sem uso comercial. Para vender o app a terceiros → plano comercial da Pluggy.
+- Autorização do Meu Pluggy vence em 1 ano (o app avisa).
 
 ## Melhorias futuras
+- [ ] Webhook da Pluggy para atualizar sem precisar abrir o app
+- [ ] Opção "usar saldo real dos bancos" como saldo atual do painel
+- [ ] Editar categoria de uma transação importada (e lembrar para as próximas)
 - [ ] Editar transação existente (hoje: excluir e criar de novo)
 - [ ] Excluir parcelamento/série inteira de uma vez (a série já pode ser encerrada no painel)
 - [ ] Notificação por e-mail/push de vencimentos
