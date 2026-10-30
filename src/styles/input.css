@@ -65,6 +65,7 @@
   .segmented { @apply grid grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1 dark:bg-slate-950/70; }
   .segmented > button { @apply rounded-lg py-2 text-sm font-medium text-slate-500 transition-all duration-300 dark:text-slate-400; }
   .segmented > button[aria-pressed='true'][data-kind='expense'] { @apply bg-white text-rose-600 shadow-sm dark:bg-slate-800 dark:text-rose-300; }
+  .segmented > button[aria-pressed='true'][data-kind='neutral'] { @apply bg-white text-slate-900 shadow-sm dark:bg-slate-800 dark:text-white; }
   .segmented > button[aria-pressed='true'][data-kind='income'] { @apply bg-white text-emerald-600 shadow-sm dark:bg-slate-800 dark:text-emerald-300; }
 
   .modal {

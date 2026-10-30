@@ -26,7 +26,7 @@ export function setChartDefaults() {
 export function renderDoughnut(canvas, items, { onSliceClick, onHoverIndex } = {}) {
   if (!window.Chart) return null;
   const p = palette();
-  doughnut?.destroy();
+  destroyDoughnut();
   doughnut = new Chart(canvas, {
     type: 'doughnut',
     data: {
@@ -75,6 +75,18 @@ export function renderDoughnut(canvas, items, { onSliceClick, onHoverIndex } = {
 
 export const getDoughnut = () => doughnut;
 
+/** Desmonta todos os gráficos (usado antes de esconder o painel, ex.: ao sair). */
+export function destroyAllCharts() {
+  destroyDoughnut();
+  evolution?.destroy();
+  evolution = null;
+}
+
+export function destroyDoughnut() {
+  doughnut?.destroy();
+  doughnut = null;
+}
+
 /** Barras de entradas x saídas por mês. Meses futuros aparecem translúcidos. */
 export function renderEvolution(canvas, series, selectedYM, { onBarClick } = {}) {
   if (!window.Chart) return null;
@@ -82,6 +94,7 @@ export function renderEvolution(canvas, series, selectedYM, { onBarClick } = {})
   const alpha = (hex, a) => hex + Math.round(a * 255).toString(16).padStart(2, '0');
   const tone = (hex, s) => (s.mode === 'future' ? alpha(hex, 0.35) : s.ym === selectedYM ? hex : alpha(hex, 0.7));
   evolution?.destroy();
+  evolution = null;
   evolution = new Chart(canvas, {
     type: 'bar',
     data: {

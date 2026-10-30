@@ -1,0 +1,77 @@
+// =============================================================================
+// AUTENTICAÇÃO (Supabase Auth — e-mail e senha)
+// Só funciona quando o Supabase está configurado (ver env.js / Vercel).
+// =============================================================================
+import { getSupabase } from './supabaseClient.js';
+
+const client = () => {
+  const c = getSupabase();
+  if (!c) throw new Error('Supabase não está configurado.');
+  return c;
+};
+
+/** Traduz as mensagens do Supabase Auth para português. */
+export function authErrorMessage(error) {
+  const m = (error?.message || String(error || '')).toLowerCase();
+  if (m.includes('invalid login credentials')) return 'E-mail ou senha incorretos.';
+  if (m.includes('email not confirmed')) return 'Confirme seu e-mail antes de entrar — veja a mensagem que enviamos para sua caixa de entrada.';
+  if (m.includes('user already registered') || m.includes('already been registered')) return 'Este e-mail já tem cadastro. Use "Entrar".';
+  if (m.includes('password should be at least') || m.includes('weak password')) return 'A senha precisa ter pelo menos 6 caracteres (use letras e números).';
+  if (m.includes('unable to validate email') || m.includes('invalid format') || m.includes('email address') && m.includes('invalid')) return 'E-mail inválido.';
+  if (m.includes('rate limit') || m.includes('too many') || m.includes('security purposes')) return 'Muitas tentativas. Aguarde um minuto e tente de novo.';
+  if (m.includes('signups not allowed')) return 'Novos cadastros estão desativados neste projeto.';
+  if (m.includes('same password') || m.includes('different from the old')) return 'A nova senha precisa ser diferente da atual.';
+  if (m.includes('failed to fetch') || m.includes('network')) return 'Sem conexão com o servidor. Verifique sua internet.';
+  return 'Não foi possível concluir. Tente novamente.';
+}
+
+export async function getCurrentUser() {
+  const { data } = await client().auth.getSession();
+  return data?.session?.user ?? null;
+}
+
+/** callback(event, user) — eventos: SIGNED_IN, SIGNED_OUT, PASSWORD_RECOVERY, TOKEN_REFRESHED, USER_UPDATED, INITIAL_SESSION */
+export function onAuthChange(callback) {
+  const { data } = client().auth.onAuthStateChange((event, session) => {
+    // Não fazer chamadas ao Supabase dentro deste callback (recomendação oficial):
+    setTimeout(() => callback(event, session?.user ?? null), 0);
+  });
+  return () => data.subscription.unsubscribe();
+}
+
+export async function signIn(email, password) {
+  const { data, error } = await client().auth.signInWithPassword({ email, password });
+  if (error) throw error;
+  return data.user;
+}
+
+/** Retorna { user, needsConfirmation } */
+export async function signUp(email, password) {
+  const { data, error } = await client().auth.signUp({
+    email,
+    password,
+    options: { emailRedirectTo: window.location.origin },
+  });
+  if (error) throw error;
+  // Com "Confirm email" ligado no Supabase, não vem sessão: precisa confirmar.
+  // Se o e-mail já existir, o Supabase devolve um usuário sem identidades.
+  if (data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+    throw new Error('User already registered');
+  }
+  return { user: data.user, needsConfirmation: !data.session };
+}
+
+export async function sendPasswordReset(email) {
+  const { error } = await client().auth.resetPasswordForEmail(email, { redirectTo: window.location.origin });
+  if (error) throw error;
+}
+
+export async function updatePassword(password) {
+  const { error } = await client().auth.updateUser({ password });
+  if (error) throw error;
+}
+
+export async function signOut() {
+  const { error } = await client().auth.signOut();
+  if (error) throw error;
+}

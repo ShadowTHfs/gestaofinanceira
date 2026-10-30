@@ -95,3 +95,77 @@ drop policy if exists "own_user_settings" on public.user_settings;
 create policy "own_user_settings" on public.user_settings
   for all to authenticated
   using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
+
+-- ------------------------------------------------------------ permissões
+-- Só usuários logados acessam as tabelas (e o RLS acima limita aos próprios dados).
+revoke all on public.bank_connections, public.recurring_rules, public.transactions, public.user_settings from anon;
+grant select, insert, update, delete on public.bank_connections, public.recurring_rules, public.transactions, public.user_settings to authenticated;
+
+-- =============================================================================
+-- v3 — categorias personalizadas, itens, agendamentos e metas (ADITIVO)
+-- Pode rodar o arquivo inteiro de novo: nada é apagado.
+-- =============================================================================
+
+-- Itens dentro da transação (ex.: lista do supermercado) e status de pagamento
+alter table public.transactions add column if not exists items jsonb;
+alter table public.transactions add column if not exists status text not null default 'paid';
+do $$ begin
+  alter table public.transactions add constraint transactions_status_ck check (status in ('paid', 'pending'));
+exception when duplicate_object then null; end $$;
+
+-- Recorrência com frequência e duração
+alter table public.recurring_rules add column if not exists frequency text not null default 'monthly';
+alter table public.recurring_rules add column if not exists start_date date;
+alter table public.recurring_rules add column if not exists end_date date;
+alter table public.recurring_rules add column if not exists occurrences smallint;
+do $$ begin
+  alter table public.recurring_rules add constraint recurring_frequency_ck check (frequency in ('weekly', 'monthly', 'yearly'));
+exception when duplicate_object then null; end $$;
+do $$ begin
+  alter table public.recurring_rules add constraint recurring_occurrences_ck check (occurrences is null or occurrences between 1 and 600);
+exception when duplicate_object then null; end $$;
+
+-- Categorias personalizadas
+create table if not exists public.categories (
+  id          text not null,                    -- ex.: 'c_9f2a…' (gerado pelo app)
+  user_id     uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  label       text not null check (char_length(label) between 1 and 30),
+  type        text not null check (type in ('income', 'expense')),
+  icon        text not null default 'circle-ellipsis',
+  color       text not null default 'slate',
+  created_at  timestamptz not null default now(),
+  primary key (user_id, id)
+);
+create index if not exists categories_user_idx on public.categories (user_id);
+
+-- Metas
+create table if not exists public.goals (
+  id                    uuid primary key default gen_random_uuid(),
+  user_id               uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  name                  text not null check (char_length(name) between 1 and 60),
+  target_amount         numeric(14, 2) not null check (target_amount > 0),
+  saved_amount          numeric(14, 2) not null default 0 check (saved_amount >= 0),
+  target_date           date,
+  monthly_contribution  numeric(14, 2) check (monthly_contribution is null or monthly_contribution >= 0),
+  annual_rate           numeric(6, 3) not null default 0 check (annual_rate between 0 and 100),
+  icon                  text not null default 'target',
+  color                 text not null default 'indigo',
+  created_at            timestamptz not null default now()
+);
+create index if not exists goals_user_idx on public.goals (user_id);
+
+alter table public.categories enable row level security;
+alter table public.goals      enable row level security;
+
+drop policy if exists "own_categories" on public.categories;
+create policy "own_categories" on public.categories
+  for all to authenticated
+  using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
+
+drop policy if exists "own_goals" on public.goals;
+create policy "own_goals" on public.goals
+  for all to authenticated
+  using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
+
+revoke all on public.categories, public.goals from anon;
+grant select, insert, update, delete on public.categories, public.goals to authenticated;

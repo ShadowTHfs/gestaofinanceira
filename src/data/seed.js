@@ -1,7 +1,7 @@
 // Dados fictícios de demonstração — gerados relativos à data de hoje, para o
 // painel sempre parecer "vivo" (histórico de 5 meses + mês atual + futuros).
 // Usa gerador pseudoaleatório com semente fixa: mesma demo em todo navegador.
-import { uid, todayISO, ymOf, dayOf, addMonths, dateWithDay, round2 } from '../utils.js';
+import { uid, todayISO, ymOf, dayOf, addMonths, dateWithDay, round2, toISODate } from '../utils.js';
 
 function rng(seed) {
   let a = seed;
@@ -38,7 +38,7 @@ export function buildSeed() {
   ];
 
   const tx = [];
-  const add = (o) => tx.push({ id: uid(), source: 'manual', recurringId: null, installment: null, externalId: null, accountId: null, createdAt: now, ...o });
+  const add = (o) => tx.push({ id: uid(), source: 'manual', status: 'paid', items: null, recurringId: null, installment: null, externalId: null, accountId: null, createdAt: now, ...o });
 
   const variable = [
     { cat: 'alimentacao', n: 4, min: 140, max: 390, names: ['Supermercado', 'Feira da semana', 'Atacadão'] },
@@ -83,9 +83,45 @@ export function buildSeed() {
   installments('Notebook', 'compras', 349.9, 10, addMonths(cur, -3), 20);
   installments('Curso de inglês', 'educacao', 180, 6, addMonths(cur, -1), 25);
 
+  // Categoria personalizada + gastos nela
+  const categories = [{ id: 'c_pets_demo', label: 'Pets', type: 'expense', icon: 'paw-print', color: 'pink' }];
+  for (let i = 1; i <= 5; i++) {
+    const ym = addMonths(start, i);
+    if (ym === cur && todayDay < 3) continue;
+    add({ description: 'Pet shop', amount: between(80, 160), type: 'expense', category: 'c_pets_demo', date: dateWithDay(ym, ym === cur ? Math.min(3, todayDay) : 14) });
+  }
+
+  // Compra com itens detalhados
+  const items = [
+    { name: 'Arroz 5kg', qty: 2, price: 27.9 },
+    { name: 'Feijão 1kg', qty: 3, price: 8.49 },
+    { name: 'Café 500g', qty: 1, price: 18.9 },
+    { name: 'Frango (kg)', qty: 2.5, price: 16.9 },
+  ];
+  add({ description: 'Supermercado (lista)', amount: round2(items.reduce((a, it) => a + it.qty * it.price, 0)), type: 'expense', category: 'alimentacao', date: today, items });
+
+  // Pagamentos agendados (a pagar) — um vence em breve, outro no próximo mês
+  const inDays = (n) => { const d = new Date(); d.setDate(d.getDate() + n); return toISODate(d); };
+  add({ description: 'Conta de luz', amount: 186.4, type: 'expense', category: 'moradia', date: inDays(3), status: 'pending' });
+  add({ description: 'IPVA (cota única)', amount: 980, type: 'expense', category: 'transporte', date: inDays(40), status: 'pending' });
+
+  // Série semanal com duração definida (8 semanas a partir desta semana)
+  recurring.push({
+    id: uid(), description: 'Diarista', amount: 150, type: 'expense', category: 'moradia', kind: 'fixed',
+    frequency: 'weekly', startDate: inDays(2), day: dayOf(inDays(2)), startMonth: ymOf(inDays(2)), endMonth: null, occurrences: 8, active: true,
+  });
+
+  // Metas
+  const goals = [
+    { id: uid(), name: 'Reserva de emergência', targetAmount: 30000, savedAmount: 8500, targetDate: dateWithDay(addMonths(cur, 18), 28), monthlyContribution: null, annualRate: 10.5, icon: 'piggy-bank', color: 'emerald', createdAt: now },
+    { id: uid(), name: 'Viagem de férias', targetAmount: 7000, savedAmount: 1200, targetDate: dateWithDay(addMonths(cur, 6), 15), monthlyContribution: 600, annualRate: 0, icon: 'plane', color: 'sky', createdAt: now },
+  ];
+
   return {
     transactions: tx,
     recurring,
     settings: { openingBalance: 3500, monthlyBudget: 6500 },
+    categories,
+    goals,
   };
 }

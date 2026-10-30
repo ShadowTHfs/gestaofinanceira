@@ -14,8 +14,9 @@ export const CONFIG = Object.freeze({
   appName: 'Finanças',
   supabaseUrl: (env.SUPABASE_URL || '').trim(),
   supabaseAnonKey: (env.SUPABASE_ANON_KEY || '').trim(),
-  // Cliente oficial carregado sob demanda (só quando as chaves existirem).
-  supabaseClientUrl: 'https://esm.sh/@supabase/supabase-js@2',
+  // Cliente oficial @supabase/supabase-js (v2), hospedado junto com o app
+  // e carregado só quando as chaves existirem.
+  supabaseClientUrl: './assets/vendor/supabase.umd.js',
   storagePrefix: 'gf.v2.',
   locale: 'pt-BR',
   currency: 'BRL',
