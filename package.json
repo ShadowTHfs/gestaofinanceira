@@ -1,0 +1,19 @@
+{
+  "name": "gestao-financeira",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Painel de gestão financeira pessoal — SPA estática pronta para Vercel e Supabase.",
+  "type": "module",
+  "scripts": {
+    "build:css": "tailwindcss -c tailwind.config.cjs -i ./src/styles/input.css -o ./assets/app.css --minify",
+    "watch:css": "tailwindcss -c tailwind.config.cjs -i ./src/styles/input.css -o ./assets/app.css --watch",
+    "build": "npm run build:css && node scripts/build.mjs",
+    "dev": "npx --yes serve -s . -l 3000"
+  },
+  "devDependencies": {
+    "tailwindcss": "^3.4.17"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

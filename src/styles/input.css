@@ -1,0 +1,86 @@
+/* Fonte do Tailwind. Gera assets/app.css com: npm run build:css */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html { -webkit-tap-highlight-color: transparent; }
+  body {
+    @apply min-h-screen bg-slate-50 text-slate-900 antialiased dark:bg-slate-950 dark:text-slate-100;
+    font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+    font-feature-settings: 'cv11', 'ss01';
+  }
+  ::selection { @apply bg-indigo-500/30; }
+  dialog::backdrop { background: rgb(2 6 23 / 0.6); backdrop-filter: blur(6px); }
+}
+
+@layer components {
+  .glass-card {
+    @apply rounded-2xl border border-slate-200/80 bg-white/70 shadow-sm shadow-slate-900/5 backdrop-blur-xl transition-all duration-300
+           dark:border-slate-800/80 dark:bg-slate-900/70 dark:shadow-black/20;
+  }
+  .glass-hover {
+    @apply hover:-translate-y-0.5 hover:border-slate-300/80 hover:shadow-xl hover:shadow-indigo-500/5 dark:hover:border-slate-700/80 dark:hover:shadow-indigo-500/10;
+  }
+  .card-title { @apply text-sm font-semibold tracking-tight text-slate-900 dark:text-white; }
+  .card-sub { @apply text-xs text-slate-500 dark:text-slate-400; }
+
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-500 to-violet-600 px-4 py-2.5 text-sm font-semibold text-white
+           shadow-lg shadow-indigo-500/25 transition-all duration-300 hover:-translate-y-px hover:shadow-indigo-500/40 hover:brightness-110 active:translate-y-0 active:scale-[0.98]
+           focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 focus-visible:ring-offset-2 focus-visible:ring-offset-white disabled:cursor-not-allowed disabled:opacity-60 dark:focus-visible:ring-offset-slate-950;
+  }
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200/80 bg-white/60 px-3 py-2 text-sm font-medium text-slate-700 transition-all duration-300
+           hover:border-slate-300 hover:bg-white hover:text-slate-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400
+           dark:border-slate-800/80 dark:bg-slate-900/60 dark:text-slate-300 dark:hover:border-slate-700 dark:hover:bg-slate-800/80 dark:hover:text-white;
+  }
+  .btn-icon {
+    @apply grid h-9 w-9 place-items-center rounded-xl text-slate-500 transition-all duration-300 hover:bg-slate-200/60 hover:text-slate-900
+           focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white;
+  }
+  .btn-danger {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm font-medium text-rose-600 transition-all duration-300
+           hover:bg-rose-500/20 dark:text-rose-300;
+  }
+
+  .field-label { @apply mb-1.5 block text-xs font-medium text-slate-600 dark:text-slate-400; }
+  .input {
+    @apply w-full rounded-xl border border-slate-200 bg-white/80 px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 transition-all duration-200
+           focus:border-indigo-400 focus:outline-none focus:ring-4 focus:ring-indigo-500/15
+           dark:border-slate-800 dark:bg-slate-950/60 dark:text-slate-100 dark:placeholder-slate-500 dark:focus:border-indigo-500;
+  }
+  .input-error { @apply border-rose-400 focus:border-rose-400 focus:ring-rose-500/15 dark:border-rose-500/70; }
+
+  .chip {
+    @apply inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-transparent px-3 py-1.5 text-xs font-medium text-slate-600 transition-all duration-300
+           hover:bg-slate-200/60 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white;
+  }
+  .chip-active {
+    @apply border-indigo-500/30 bg-indigo-500/10 text-indigo-700 hover:bg-indigo-500/15 dark:text-indigo-300 dark:hover:bg-indigo-500/20 dark:hover:text-indigo-200;
+  }
+
+  .badge { @apply inline-flex items-center gap-1 whitespace-nowrap rounded-md px-1.5 py-0.5 text-[11px] font-medium ring-1 ring-inset; }
+
+  .segmented { @apply grid grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1 dark:bg-slate-950/70; }
+  .segmented > button { @apply rounded-lg py-2 text-sm font-medium text-slate-500 transition-all duration-300 dark:text-slate-400; }
+  .segmented > button[aria-pressed='true'][data-kind='expense'] { @apply bg-white text-rose-600 shadow-sm dark:bg-slate-800 dark:text-rose-300; }
+  .segmented > button[aria-pressed='true'][data-kind='income'] { @apply bg-white text-emerald-600 shadow-sm dark:bg-slate-800 dark:text-emerald-300; }
+
+  .modal {
+    @apply m-auto w-[calc(100%-2rem)] max-w-lg rounded-2xl border border-slate-200/80 bg-white/95 p-0 text-slate-900 shadow-2xl backdrop-blur-xl
+           dark:border-slate-800/80 dark:bg-slate-900/95 dark:text-slate-100;
+  }
+  .modal[open] { animation: modal-in 0.25s cubic-bezier(0.16, 1, 0.3, 1); }
+
+  .skeleton { @apply animate-pulse rounded-lg bg-slate-200/70 dark:bg-slate-800/70; }
+  .scroll-thin { scrollbar-width: thin; scrollbar-color: rgb(100 116 139 / 0.3) transparent; }
+}
+
+@keyframes modal-in { from { opacity: 0; transform: translateY(12px) scale(0.98); } to { opacity: 1; transform: none; } }
+@keyframes fade-up { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.animate-fade-up { animation: fade-up 0.45s cubic-bezier(0.16, 1, 0.3, 1) both; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}

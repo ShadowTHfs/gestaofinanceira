@@ -1,0 +1,331 @@
+<!doctype html>
+<html lang="pt-BR" class="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Finanças · Painel financeiro pessoal</title>
+  <meta name="description" content="Painel de gestão financeira pessoal: saldo, orçamento, categorias, projeções e Open Finance." />
+  <meta name="theme-color" content="#020617" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'><stop offset='0' stop-color='%236366f1'/><stop offset='1' stop-color='%237c3aed'/></linearGradient></defs><rect width='32' height='32' rx='9' fill='url(%23g)'/><path d='M9 20l5-5 4 3 6-7' stroke='white' stroke-width='2.6' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>" />
+
+  <!-- Aplica o tema antes de pintar a tela (evita "piscar" claro/escuro) -->
+  <script>
+    (function () {
+      try {
+        var t = localStorage.getItem('gf.theme');
+        var dark = t ? t === 'dark' : true;
+        document.documentElement.classList.toggle('dark', dark);
+      } catch (e) {}
+    })();
+  </script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./assets/app.css" />
+
+  <script src="./env.js"></script>
+  <script src="./assets/vendor/chart.umd.min.js" defer></script>
+  <script type="module" src="./src/app.js"></script>
+</head>
+
+<body class="overflow-x-hidden">
+  <!-- Fundo decorativo -->
+  <div aria-hidden="true" class="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
+    <div class="absolute -left-40 -top-40 h-[32rem] w-[32rem] rounded-full bg-indigo-500/20 blur-3xl dark:bg-indigo-600/20"></div>
+    <div class="absolute -right-32 top-1/3 h-[28rem] w-[28rem] rounded-full bg-violet-500/10 blur-3xl dark:bg-violet-600/15"></div>
+    <div class="absolute bottom-0 left-1/3 h-[24rem] w-[24rem] rounded-full bg-emerald-400/10 blur-3xl dark:bg-emerald-500/5"></div>
+    <div class="absolute inset-0 bg-[radial-gradient(rgba(100,116,139,0.12)_1px,transparent_1px)] [background-size:24px_24px] [mask-image:linear-gradient(to_bottom,black,transparent_70%)]"></div>
+  </div>
+
+  <!-- ===================== CABEÇALHO ===================== -->
+  <header class="sticky top-0 z-30 border-b border-slate-200/70 bg-white/70 backdrop-blur-xl dark:border-slate-800/70 dark:bg-slate-950/70">
+    <div class="mx-auto flex max-w-7xl items-center gap-3 px-4 py-3 sm:px-6">
+      <div class="flex items-center gap-3">
+        <div class="grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-lg shadow-indigo-500/30">
+          <span data-icon="wallet" data-icon-class="h-5 w-5"></span>
+        </div>
+        <div class="leading-tight">
+          <p class="text-base font-bold tracking-tight">Finanças</p>
+          <p class="hidden text-xs text-slate-500 dark:text-slate-400 sm:block">Seu dinheiro, com clareza</p>
+        </div>
+      </div>
+
+      <div id="storage-badge" class="ml-2 hidden md:block"></div>
+
+      <div class="ml-auto flex items-center gap-1.5">
+        <button id="btn-theme" class="btn-icon" type="button" aria-label="Alternar tema claro/escuro" title="Alternar tema">
+          <span class="hidden dark:block" data-icon="sun"></span>
+          <span class="block dark:hidden" data-icon="moon"></span>
+        </button>
+        <button id="btn-settings" class="btn-icon" type="button" aria-label="Configurações" title="Saldo inicial e orçamento">
+          <span data-icon="settings"></span>
+        </button>
+        <button id="btn-new" class="btn-primary ml-1" type="button">
+          <span data-icon="plus"></span><span class="hidden sm:inline">Nova transação</span><span class="sm:hidden">Nova</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="mx-auto max-w-7xl space-y-6 px-4 pb-16 pt-6 sm:px-6">
+    <!-- ===================== NAVEGAÇÃO TEMPORAL ===================== -->
+    <section class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+      <div>
+        <p id="greeting" class="text-sm text-slate-500 dark:text-slate-400">Olá!</p>
+        <h1 class="mt-0.5 text-2xl font-bold tracking-tight sm:text-3xl">Visão geral</h1>
+      </div>
+      <div class="flex items-center gap-2">
+        <div class="glass-card flex items-center gap-1 p-1">
+          <button id="month-prev" class="btn-icon" type="button" aria-label="Mês anterior"><span data-icon="chevron-left"></span></button>
+          <div class="min-w-[11.5rem] px-2 text-center">
+            <p id="month-label" class="text-sm font-semibold">—</p>
+            <p id="month-mode" class="text-[11px] font-medium"></p>
+          </div>
+          <button id="month-next" class="btn-icon" type="button" aria-label="Próximo mês"><span data-icon="chevron-right"></span></button>
+        </div>
+        <button id="month-today" class="btn-ghost h-[46px]" type="button" title="Voltar ao mês atual">
+          <span data-icon="calendar"></span><span class="hidden sm:inline">Hoje</span>
+        </button>
+      </div>
+    </section>
+
+    <div id="month-strip" class="scroll-thin -mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1"></div>
+    <div id="mode-banner"></div>
+
+    <!-- ===================== KPIs ===================== -->
+    <section id="kpis" class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4" aria-live="polite">
+      <div class="glass-card h-[150px] p-5"><div class="skeleton h-4 w-24"></div><div class="skeleton mt-4 h-8 w-36"></div></div>
+      <div class="glass-card h-[150px] p-5"><div class="skeleton h-4 w-24"></div><div class="skeleton mt-4 h-8 w-36"></div></div>
+      <div class="glass-card h-[150px] p-5"><div class="skeleton h-4 w-24"></div><div class="skeleton mt-4 h-8 w-36"></div></div>
+      <div class="glass-card h-[150px] p-5"><div class="skeleton h-4 w-24"></div><div class="skeleton mt-4 h-8 w-36"></div></div>
+    </section>
+
+    <!-- ===================== GRÁFICOS ===================== -->
+    <section class="grid grid-cols-1 gap-4 lg:grid-cols-5">
+      <article class="glass-card glass-hover p-5 lg:col-span-3">
+        <header class="mb-4 flex items-start justify-between gap-3">
+          <div>
+            <h2 class="card-title flex items-center gap-2"><span data-icon="chart-pie" class="text-indigo-500"></span>Gastos por categoria</h2>
+            <p id="pie-sub" class="card-sub mt-0.5">—</p>
+          </div>
+          <span class="card-sub hidden sm:block">Clique numa fatia para filtrar</span>
+        </header>
+        <div id="pie-wrap" class="grid grid-cols-1 items-center gap-6 md:grid-cols-[minmax(0,15rem)_1fr]">
+          <div class="relative mx-auto aspect-square w-full max-w-[15rem]">
+            <canvas id="pie-canvas" aria-label="Gráfico de rosca dos gastos por categoria" role="img"></canvas>
+            <div class="pointer-events-none absolute inset-0 grid place-items-center text-center">
+              <div>
+                <p id="pie-center-label" class="text-[11px] font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Total</p>
+                <p id="pie-center-value" class="mt-0.5 text-xl font-bold tabular-nums tracking-tight">—</p>
+              </div>
+            </div>
+          </div>
+          <ul id="pie-legend" class="space-y-1"></ul>
+        </div>
+        <div id="pie-empty" class="hidden"></div>
+      </article>
+
+      <article class="glass-card glass-hover flex flex-col p-5 lg:col-span-2">
+        <header class="mb-4 flex items-start justify-between gap-3">
+          <div>
+            <h2 class="card-title flex items-center gap-2"><span data-icon="chart-column" class="text-indigo-500"></span>Entradas x Saídas</h2>
+            <p class="card-sub mt-0.5">Histórico e previsão · clique num mês para abrir</p>
+          </div>
+        </header>
+        <div class="relative min-h-[15rem] flex-1"><canvas id="bar-canvas" aria-label="Gráfico de barras de entradas e saídas por mês" role="img"></canvas></div>
+        <div class="mt-3 flex items-center gap-4 text-xs text-slate-500 dark:text-slate-400">
+          <span class="inline-flex items-center gap-1.5"><i class="h-2.5 w-2.5 rounded-sm bg-emerald-500"></i>Entradas</span>
+          <span class="inline-flex items-center gap-1.5"><i class="h-2.5 w-2.5 rounded-sm bg-rose-500"></i>Saídas</span>
+          <span class="inline-flex items-center gap-1.5"><i class="h-2.5 w-2.5 rounded-sm bg-slate-400/40"></i>Previsto</span>
+        </div>
+      </article>
+    </section>
+
+    <!-- ===================== TRANSAÇÕES + LATERAL ===================== -->
+    <section class="grid grid-cols-1 gap-4 lg:grid-cols-3">
+      <article class="glass-card p-5 lg:col-span-2 lg:flex lg:flex-col">
+        <header class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 class="card-title flex items-center gap-2"><span data-icon="receipt" class="text-indigo-500"></span>Transações</h2>
+            <p id="tx-sub" class="card-sub mt-0.5">—</p>
+          </div>
+          <div class="relative sm:w-64">
+            <span data-icon="search" class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></span>
+            <input id="f-search" type="search" class="input py-2 pl-9" placeholder="Buscar descrição…" autocomplete="off" />
+          </div>
+        </header>
+
+        <div class="mt-4 flex flex-wrap items-center gap-2">
+          <div id="f-type" class="flex flex-wrap gap-1" role="group" aria-label="Filtrar por tipo">
+            <button class="chip chip-active" data-type="all" type="button">Todas</button>
+            <button class="chip" data-type="income" type="button">Entradas</button>
+            <button class="chip" data-type="expense" type="button">Saídas</button>
+            <button class="chip" data-type="planned" type="button">Previstas</button>
+          </div>
+          <div class="ml-auto flex gap-2">
+            <select id="f-category" class="input w-auto py-1.5 text-xs" aria-label="Filtrar por categoria"></select>
+            <select id="f-source" class="input w-auto py-1.5 text-xs" aria-label="Filtrar por origem">
+              <option value="all">Todas as origens</option>
+              <option value="manual">Manual</option>
+              <option value="open_finance">Open Finance</option>
+            </select>
+          </div>
+        </div>
+
+        <div id="tx-active-filter" class="mt-3"></div>
+        <div id="tx-list" class="scroll-thin mt-2 max-h-[34rem] overflow-y-auto pr-1 lg:h-0 lg:max-h-none lg:min-h-[24rem] lg:flex-1"></div>
+      </article>
+
+      <div class="space-y-4">
+        <!-- Contas fixas, assinaturas e parcelamentos -->
+        <article class="glass-card glass-hover p-5">
+          <header class="mb-3">
+            <h2 class="card-title flex items-center gap-2"><span data-icon="calendar-clock" class="text-indigo-500"></span>Compromissos recorrentes</h2>
+            <p class="card-sub mt-0.5">Contas fixas, assinaturas e parcelamentos</p>
+          </header>
+          <div id="recurring-list"></div>
+        </article>
+
+        <!-- Open Finance -->
+        <article class="glass-card glass-hover relative overflow-hidden p-5">
+          <div aria-hidden="true" class="pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full bg-gradient-to-br from-indigo-500/30 to-violet-600/20 blur-2xl"></div>
+          <header class="relative mb-3 flex items-start justify-between gap-2">
+            <div>
+              <h2 class="card-title flex items-center gap-2"><span data-icon="landmark" class="text-indigo-500"></span>Conexões Open Finance</h2>
+              <p class="card-sub mt-0.5">Importe extratos automaticamente</p>
+            </div>
+            <span class="badge bg-amber-500/10 text-amber-600 ring-amber-500/30 dark:text-amber-300">Simulação</span>
+          </header>
+          <div id="of-list" class="relative space-y-2"></div>
+          <p class="relative mt-3 flex items-start gap-1.5 text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
+            <span data-icon="shield-check" data-icon-class="mt-px h-3.5 w-3.5 shrink-0"></span>
+            Modo demonstração: nenhum dado bancário real é acessado. A arquitetura já está pronta para um provedor oficial.
+          </p>
+        </article>
+      </div>
+    </section>
+
+    <footer class="pt-4 text-center text-xs text-slate-400 dark:text-slate-500">
+      <span id="footer-storage"></span>
+    </footer>
+  </main>
+
+  <!-- ===================== MODAL: NOVA TRANSAÇÃO ===================== -->
+  <dialog id="tx-modal" class="modal" aria-labelledby="tx-modal-title">
+    <form id="tx-form" method="dialog" novalidate>
+      <header class="flex items-center justify-between border-b border-slate-200/80 px-6 py-4 dark:border-slate-800/80">
+        <div>
+          <h3 id="tx-modal-title" class="text-base font-semibold">Nova transação</h3>
+          <p class="text-xs text-slate-500 dark:text-slate-400">Registre uma entrada ou saída</p>
+        </div>
+        <button type="button" class="btn-icon" data-close aria-label="Fechar"><span data-icon="x"></span></button>
+      </header>
+
+      <div class="space-y-4 px-6 py-5">
+        <div class="segmented" role="group" aria-label="Tipo">
+          <button type="button" data-kind="expense" aria-pressed="true">Saída</button>
+          <button type="button" data-kind="income" aria-pressed="false">Entrada</button>
+        </div>
+
+        <div>
+          <label for="tx-amount" class="field-label" id="tx-amount-label">Valor</label>
+          <div class="relative">
+            <span class="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-sm font-semibold text-slate-400">R$</span>
+            <input id="tx-amount" name="amount" inputmode="decimal" class="input pl-10 text-lg font-semibold tabular-nums" placeholder="0,00" autocomplete="off" />
+          </div>
+          <p class="mt-1 hidden text-xs text-rose-500" data-err="amount">Informe um valor maior que zero.</p>
+        </div>
+
+        <div>
+          <label for="tx-desc" class="field-label">Descrição</label>
+          <input id="tx-desc" name="description" class="input" maxlength="80" placeholder="Ex.: Supermercado, Salário…" autocomplete="off" />
+          <p class="mt-1 hidden text-xs text-rose-500" data-err="description">Descreva a transação.</p>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label for="tx-date" class="field-label">Data</label>
+            <input id="tx-date" name="date" type="date" class="input" />
+            <p class="mt-1 hidden text-xs text-rose-500" data-err="date">Data inválida.</p>
+          </div>
+          <div>
+            <label for="tx-category" class="field-label">Categoria</label>
+            <select id="tx-category" name="category" class="input"></select>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label for="tx-repeat" class="field-label">Repetição</label>
+            <select id="tx-repeat" name="repeat" class="input">
+              <option value="none">Não repete</option>
+              <option value="fixed">Conta fixa mensal</option>
+              <option value="subscription">Assinatura mensal</option>
+              <option value="installments">Parcelado</option>
+            </select>
+          </div>
+          <div id="tx-installments-wrap" class="hidden">
+            <label for="tx-installments" class="field-label">Nº de parcelas</label>
+            <input id="tx-installments" name="installments" type="number" min="2" max="48" value="3" class="input" />
+            <p class="mt-1 hidden text-xs text-rose-500" data-err="installments">Entre 2 e 48.</p>
+          </div>
+        </div>
+        <p id="tx-repeat-hint" class="hidden rounded-xl bg-indigo-500/10 px-3 py-2 text-xs text-indigo-700 dark:text-indigo-300"></p>
+      </div>
+
+      <footer class="flex justify-end gap-2 border-t border-slate-200/80 px-6 py-4 dark:border-slate-800/80">
+        <button type="button" class="btn-ghost" data-close>Cancelar</button>
+        <button type="submit" class="btn-primary" id="tx-submit"><span data-icon="check"></span>Salvar</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <!-- ===================== MODAL: CONFIGURAÇÕES ===================== -->
+  <dialog id="settings-modal" class="modal" aria-labelledby="settings-title">
+    <form id="settings-form" method="dialog" novalidate>
+      <header class="flex items-center justify-between border-b border-slate-200/80 px-6 py-4 dark:border-slate-800/80">
+        <div>
+          <h3 id="settings-title" class="text-base font-semibold">Configurações</h3>
+          <p class="text-xs text-slate-500 dark:text-slate-400">Base dos cálculos do painel</p>
+        </div>
+        <button type="button" class="btn-icon" data-close aria-label="Fechar"><span data-icon="x"></span></button>
+      </header>
+      <div class="space-y-4 px-6 py-5">
+        <div>
+          <label for="s-budget" class="field-label">Orçamento mensal de gastos</label>
+          <input id="s-budget" class="input tabular-nums" inputmode="decimal" />
+          <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">Quanto você se permite gastar por mês. Usado em "Disponível" e "Teto diário".</p>
+        </div>
+        <div>
+          <label for="s-opening" class="field-label">Saldo inicial</label>
+          <input id="s-opening" class="input tabular-nums" inputmode="decimal" />
+          <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">Quanto você tinha antes da primeira transação registrada.</p>
+        </div>
+        <p class="hidden text-xs text-rose-500" data-err="settings">Use valores numéricos válidos (orçamento maior ou igual a zero).</p>
+
+        <div class="rounded-xl border border-slate-200/80 p-4 dark:border-slate-800/80">
+          <p class="text-sm font-medium">Dados do navegador</p>
+          <p class="mt-0.5 text-xs text-slate-500 dark:text-slate-400">Afeta só o armazenamento local deste navegador.</p>
+          <div class="mt-3 flex flex-wrap gap-2">
+            <button type="button" id="btn-reset-demo" class="btn-ghost"><span data-icon="rotate-ccw"></span>Recarregar demonstração</button>
+            <button type="button" id="btn-reset-empty" class="btn-danger"><span data-icon="trash-2"></span>Começar do zero</button>
+          </div>
+        </div>
+      </div>
+      <footer class="flex justify-end gap-2 border-t border-slate-200/80 px-6 py-4 dark:border-slate-800/80">
+        <button type="button" class="btn-ghost" data-close>Cancelar</button>
+        <button type="submit" class="btn-primary"><span data-icon="check"></span>Salvar</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <!-- ===================== MODAL: OPEN FINANCE ===================== -->
+  <dialog id="of-modal" class="modal max-w-md" aria-labelledby="of-title">
+    <div id="of-modal-body"></div>
+  </dialog>
+
+  <!-- Toasts -->
+  <div id="toasts" class="pointer-events-none fixed bottom-4 right-4 z-50 flex w-[calc(100%-2rem)] max-w-sm flex-col gap-2" aria-live="polite"></div>
+</body>
+</html>
