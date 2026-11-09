@@ -14,6 +14,7 @@ import { analyzeGoal } from './services/goals.js';
 import { renderDoughnut, renderEvolution, getDoughnut, destroyDoughnut, destroyAllCharts, setChartDefaults } from './ui/charts.js';
 import { icon, hydrateIcons } from './ui/icons.js';
 import * as auth from './services/auth.js';
+import { CONFIG } from './config.js';
 import {
   fmt, todayISO, currentYM, addMonths, monthLabel, dateLabel, shortDate, ymOf, dayOf, dateWithDay,
   uid, escapeHTML, parseMoney, sum,
@@ -30,6 +31,7 @@ const state = {
   goals: [],
   bankAccounts: [],
   of: { status: null, error: null, loading: false },
+  rt: { inbox: [], token: null, url: null, busy: false },
   settings: { ...repo.DEFAULT_SETTINGS },
   filters: { type: 'all', search: '', category: 'all', source: 'all' },
   busy: new Set(),
@@ -105,11 +107,14 @@ async function enterAccount(user) {
     console.error(err);
     toast(err.message || 'Não foi possível acessar o banco.', 'error');
   }
+  startRealtime(user.id);
   // Open Finance: verifica a integração e atualiza os bancos se estiver desatualizado.
-  loadOpenFinanceStatus().then(autoSyncIfStale).catch((err) => console.warn('[open finance]', err));
+  loadOpenFinanceStatus().then(() => { loadInbox(); return autoSyncIfStale(); }).catch((err) => console.warn('[open finance]', err));
 }
 
 function leaveAccount() {
+  stopRealtime();
+  state.rt = { inbox: [], token: null, url: null, busy: false };
   repo.clearUserCache();
   repo.setUser(null);
   currentUserId = null;
@@ -393,6 +398,7 @@ function renderAll() {
   renderGoals();
   renderRecurring();
   renderOpenFinance();
+  renderRealtime();
 }
 
 function renderGreeting() {
@@ -702,6 +708,9 @@ function txRow(t) {
     const label = conn?.institution ? conn.institution.replace(/^meu ?pluggy\s*[·\-:]\s*/i, '') : 'Open Finance';
     tags.push(`<span class="badge bg-indigo-500/10 text-indigo-600 ring-indigo-500/20 dark:text-indigo-300" title="Importada do banco">${icon(acc?.type === 'CREDIT' ? 'credit-card' : 'landmark', 'h-3 w-3')}${escapeHTML(label)}</span>`);
   }
+  if (t.source === 'notification') {
+    tags.push(`<span class="badge border border-dashed border-amber-400/60 bg-amber-500/10 text-amber-700 ring-transparent dark:text-amber-300" title="Veio da notificação do banco no celular. Some sozinha quando o banco mandar o lançamento oficial.">${icon('zap', 'h-3 w-3')}Prévia</span>`);
+  }
   const canPay = planned && (t.status === 'pending' || t.projected);
   const itemsDetail = t.items?.length
     ? `<div id="items-${t.id}" class="ml-[3.25rem] mr-2 hidden pb-2"><table class="w-full text-xs"><tbody>
@@ -930,6 +939,7 @@ async function loadOpenFinanceStatus({ force = false } = {}) {
   } finally {
     state.of.loading = false;
     renderOpenFinance();
+    renderRealtime();
   }
 }
 
@@ -1227,6 +1237,243 @@ async function removeConnection(id) {
   state.bankAccounts = state.bankAccounts.filter((a) => a.connectionId !== conn.id);
   toast(removeToo ? 'Conexão e transações removidas' : 'Conexão removida', 'info');
   renderAll();
+}
+
+// ------------------------------------------------------------------ tempo real
+// Duas peças: (1) o celular manda a notificação do banco para a função → vira uma
+// "prévia" na hora; (2) o webhook da Pluggy avisa quando o banco tem dados novos →
+// a função sincroniza sozinha e troca a prévia pelo lançamento oficial.
+// A tela se atualiza sozinha pelo Supabase Realtime.
+let rtChannel = null;
+let rtTimer = null;
+let rtToasts = [];
+
+function startRealtime(uid) {
+  stopRealtime();
+  const sb = repo.getSupabase();
+  if (!sb?.channel || repo.getRepositoryStatus().backend !== 'supabase') return;
+  const onChange = (payload) => {
+    const row = payload.new;
+    if (payload.eventType === 'INSERT' && row?.source === 'notification' && row.user_id === uid) rtToasts.push(row);
+    clearTimeout(rtTimer);
+    rtTimer = setTimeout(refreshFromRealtime, 700); // junta várias mudanças seguidas numa recarga só
+  };
+  try {
+    rtChannel = sb.channel(`gf-live-${uid}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions', filter: `user_id=eq.${uid}` }, onChange)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notification_inbox', filter: `user_id=eq.${uid}` }, onChange)
+      .subscribe();
+  } catch (err) {
+    console.warn('[tempo real]', err);
+    rtChannel = null;
+  }
+}
+
+function stopRealtime() {
+  clearTimeout(rtTimer);
+  rtToasts = [];
+  const sb = repo.getSupabase();
+  if (rtChannel && sb?.removeChannel) sb.removeChannel(rtChannel).catch?.(() => {});
+  rtChannel = null;
+}
+
+async function refreshFromRealtime() {
+  const uid = currentUserId;
+  if (!uid) return;
+  try {
+    const [transactions, bankAccounts, connections] = await Promise.all([repo.fetchTransactions(), repo.fetchBankAccounts(), repo.fetchConnections()]);
+    if (uid !== currentUserId) return; // saiu da conta enquanto carregava
+    Object.assign(state, { transactions, bankAccounts, connections });
+    renderAll();
+    loadInbox();
+    const news = rtToasts.splice(0);
+    for (const row of news.slice(0, 3)) {
+      toast(`⚡ ${row.description}: ${row.type === 'income' ? '+' : '−'} ${fmt(Number(row.amount))}`, 'success');
+    }
+  } catch (err) {
+    console.warn('[tempo real]', err);
+  }
+}
+
+async function loadInbox() {
+  const st = state.of.status;
+  if (!st?.realtimeReady || !st.notify) { if (state.rt.inbox.length) { state.rt.inbox = []; renderRealtime(); } return; }
+  state.rt.inbox = await repo.fetchNotificationInbox(8);
+  const last = state.rt.inbox[0]?.received_at;
+  if (last && (!st.notify.lastUsedAt || last > st.notify.lastUsedAt)) st.notify.lastUsedAt = last;
+  renderRealtime();
+}
+
+const RT_STATUS = {
+  lancada: ['Lançada', 'bg-emerald-500/10 text-emerald-700 ring-emerald-500/30 dark:text-emerald-300'],
+  duplicada: ['Já existia', 'bg-slate-500/10 text-slate-600 ring-slate-500/20 dark:text-slate-300'],
+  ignorada: ['Ignorada', 'bg-slate-500/10 text-slate-600 ring-slate-500/20 dark:text-slate-300'],
+  nao_reconhecida: ['Não entendi', 'bg-amber-500/10 text-amber-700 ring-amber-500/30 dark:text-amber-300'],
+};
+
+function agoLabel(iso) {
+  if (!iso) return 'nunca';
+  const min = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+  if (min < 1) return 'agora mesmo';
+  if (min < 60) return `há ${min} min`;
+  if (min < 1440) return `há ${Math.round(min / 60)} h`;
+  return `há ${Math.round(min / 1440)} dia(s)`;
+}
+
+function renderRealtime() {
+  const box = $('#rt-body');
+  if (!box) return;
+  const cloud = repo.getRepositoryStatus().backend === 'supabase';
+  const note = (html, tone = 'slate') => `<div class="rounded-xl border border-dashed ${tone === 'amber' ? 'border-amber-500/40 bg-amber-500/5 text-amber-900 dark:text-amber-100' : 'border-slate-300/70 text-slate-600 dark:border-slate-700/70 dark:text-slate-300'} p-4 text-xs leading-relaxed">${html}</div>`;
+  if (!cloud) { box.innerHTML = note(`${icon('lock', 'mb-2 h-5 w-5 text-amber-500')}Funciona no <strong>modo nuvem</strong> (com login), porque o celular precisa de um endereço seguro para mandar as notificações.`); return; }
+  const st = state.of.status;
+  if (state.of.loading && !st) { box.innerHTML = '<div class="skeleton h-20"></div>'; return; }
+  if (state.of.error || !st) { box.innerHTML = note('Precisa da função <code>pluggy</code> publicada no Supabase (veja o card Open Finance).'); return; }
+  if (!st.allowed) { box.innerHTML = note('Esta conta não está na lista de pessoas autorizadas deste app.'); return; }
+  if (st.realtimeReady === undefined) { box.innerHTML = note(`${icon('triangle-alert', 'mb-1 h-4 w-4')}A função <code>pluggy</code> no Supabase é a versão antiga. Cole o código novo (<strong>pluggy-index.ts</strong>) e publique de novo.`, 'amber'); return; }
+  if (!st.realtimeReady) { box.innerHTML = note(`${icon('triangle-alert', 'mb-1 h-4 w-4')}Falta atualizar o banco: rode o <strong>schema.sql</strong> mais recente no SQL Editor do Supabase.`, 'amber'); return; }
+
+  const n = st.notify;
+  const busy = state.rt.busy;
+  const phone = n
+    ? `<div class="rounded-xl border border-slate-200/80 bg-white/50 p-3 dark:border-slate-800/80 dark:bg-slate-950/30">
+        <div class="flex items-center gap-3">
+          <div class="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 text-white shadow-md">${icon('smartphone', 'h-5 w-5')}</div>
+          <div class="min-w-0 flex-1">
+            <p class="text-sm font-medium">Celular ligado</p>
+            <p class="truncate text-[11px] ${n.lastUsedAt ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-500'}">● ${n.lastUsedAt ? `recebeu ${agoLabel(n.lastUsedAt)}` : 'aguardando'}</p>
+          </div>
+          <div class="flex gap-1">
+            <button type="button" class="btn-ghost px-2.5 py-1.5 text-xs" data-rt-setup>${icon('settings', 'h-3.5 w-3.5')}Configurar</button>
+            <button type="button" class="btn-icon h-8 w-8" data-rt-revoke title="Desligar o celular" aria-label="Desligar o celular" ${busy ? 'disabled' : ''}>${icon('unplug', 'h-4 w-4')}</button>
+          </div>
+        </div>
+      </div>`
+    : `<div class="space-y-3 rounded-xl border border-dashed border-slate-300/70 p-4 dark:border-slate-700/70">
+        <p class="text-xs leading-relaxed text-slate-600 dark:text-slate-300">Quando o banco avisar no seu celular <em>"Você recebeu um Pix de R$ 50"</em>, o lançamento aparece aqui na hora como <strong>prévia</strong>. Quando o banco mandar o oficial pela Pluggy, a prévia é trocada sozinha.</p>
+        <button type="button" class="btn-primary w-full py-2 text-xs" data-rt-create ${busy ? 'disabled' : ''}>${icon(busy ? 'loader-circle' : 'zap', `h-3.5 w-3.5 ${busy ? 'animate-spin' : ''}`)}Ligar no meu celular (Android)</button>
+      </div>`;
+
+  const hookOn = Boolean(st.hook);
+  const canHook = ofReady() && st.hasOwnCredentials;
+  const hook = canHook ? `<div class="flex items-center justify-between gap-3 rounded-lg bg-slate-100/70 px-3 py-2 text-[11px] text-slate-600 dark:bg-slate-950/50 dark:text-slate-300">
+      <span class="min-w-0"><strong class="block text-xs text-slate-800 dark:text-slate-100">Atualização automática do banco</strong>${hookOn ? (st.hook.lastEventAt ? `Ligada · último aviso ${agoLabel(st.hook.lastEventAt)}` : 'Ligada · esperando o 1º aviso da Pluggy') : 'A Pluggy avisa o app quando chegam dados novos'}</span>
+      <button type="button" role="switch" aria-checked="${hookOn}" aria-label="Atualização automática do banco" data-rt-hook class="relative h-6 w-11 shrink-0 rounded-full transition-colors duration-200 ${hookOn ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-700'}" ${busy ? 'disabled' : ''}>
+        <span class="absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform duration-200 ${hookOn ? 'translate-x-5' : 'translate-x-0.5'}"></span>
+      </button>
+    </div>` : '';
+
+  const inbox = n && state.rt.inbox.length ? `<div>
+      <p class="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-slate-500">Últimas notificações</p>
+      <ul class="space-y-1">${state.rt.inbox.map((r) => {
+        const [label, cls] = RT_STATUS[r.status] || RT_STATUS.nao_reconhecida;
+        return `<li class="flex items-start gap-2 rounded-lg px-1.5 py-1 text-xs">
+          <span class="badge shrink-0 ${cls}">${label}</span>
+          <span class="min-w-0 flex-1"><span class="block truncate font-medium">${escapeHTML(r.title || r.app || 'Notificação')}</span><span class="block truncate text-slate-500 dark:text-slate-400">${escapeHTML(r.body || '')}</span></span>
+          <span class="shrink-0 text-[10px] text-slate-400">${agoLabel(r.received_at)}</span>
+        </li>`;
+      }).join('')}</ul></div>` : '';
+
+  box.innerHTML = phone + hook + inbox;
+}
+
+async function rtCreate() {
+  if (state.of.status?.notify && !window.confirm('Gerar um código novo? O código antigo para de funcionar e você terá de colar o novo no MacroDroid.')) return;
+  state.rt.busy = true; renderRealtime();
+  try {
+    const res = await openFinance.createNotifyToken();
+    state.rt.token = res.token;
+    state.rt.url = res.url;
+    await loadOpenFinanceStatus({ force: true });
+    openRealtimeSetup();
+  } catch (err) {
+    toast(err.message || 'Não foi possível gerar o código.', 'error');
+  } finally {
+    state.rt.busy = false; renderRealtime();
+  }
+}
+
+async function rtRevoke() {
+  if (!window.confirm('Desligar o celular? As notificações param de entrar no app até você gerar um código novo.')) return;
+  state.rt.busy = true; renderRealtime();
+  try {
+    await openFinance.revokeNotifyToken();
+    state.rt.token = null;
+    state.rt.inbox = [];
+    await loadOpenFinanceStatus({ force: true });
+    toast('Celular desligado', 'info');
+  } catch (err) {
+    toast(err.message || 'Não foi possível desligar.', 'error');
+  } finally {
+    state.rt.busy = false; renderRealtime();
+  }
+}
+
+async function rtToggleHook() {
+  const on = Boolean(state.of.status?.hook);
+  state.rt.busy = true; renderRealtime();
+  try {
+    if (on) await openFinance.disableHook(); else await openFinance.enableHook();
+    await loadOpenFinanceStatus({ force: true });
+    toast(on ? 'Atualização automática desligada' : 'Atualização automática ligada: a Pluggy vai avisar o app quando o banco tiver novidades', on ? 'info' : 'success');
+  } catch (err) {
+    toast(err.message || 'Não foi possível mudar a atualização automática.', 'error');
+  } finally {
+    state.rt.busy = false; renderRealtime();
+  }
+}
+
+function openRealtimeSetup() {
+  const url = state.rt.url || `${String(CONFIG.supabaseUrl || '').replace(/\/$/, '')}/functions/v1/pluggy?route=notify`;
+  const token = state.rt.token;
+  const field = (label, value, id) => `<div>
+      <p class="mb-1 text-[11px] font-medium text-slate-500">${label}</p>
+      <div class="flex gap-1.5"><code id="${id}" class="min-w-0 flex-1 break-all rounded-lg bg-slate-100 px-2.5 py-2 font-mono text-[11px] dark:bg-slate-950">${escapeHTML(value)}</code>
+      <button type="button" class="btn-ghost shrink-0 px-2.5 text-xs" data-rt-copy="${id}" aria-label="Copiar ${label}">${icon('copy', 'h-3.5 w-3.5')}</button></div></div>`;
+  $('#of-modal-body').innerHTML = `
+    <header class="flex items-center justify-between border-b border-slate-200/80 px-6 py-4 dark:border-slate-800/80">
+      <h2 id="of-title" class="flex items-center gap-2 text-base font-semibold">${icon('zap', 'h-4 w-4 text-amber-500')}Ligar no celular</h2>
+      <button type="button" class="btn-icon" data-close aria-label="Fechar">${icon('x', 'h-4 w-4')}</button>
+    </header>
+    <div class="max-h-[70vh] space-y-4 overflow-y-auto px-6 py-5 text-xs leading-relaxed">
+      ${field('Endereço (URL)', url, 'rt-url')}
+      ${token
+        ? `${field('Seu código secreto (cabeçalho x-gf-token)', token, 'rt-token')}
+           <p class="flex items-start gap-1.5 rounded-lg bg-amber-500/10 px-3 py-2 text-amber-800 dark:text-amber-200">${icon('triangle-alert', 'mt-px h-3.5 w-3.5 shrink-0')}Copie agora: por segurança, este código só aparece esta vez. Não mande para ninguém — quem tiver ele consegue lançar no seu app.</p>`
+        : `<p class="rounded-lg bg-slate-100 px-3 py-2 dark:bg-slate-950">O código secreto só aparece na hora em que é gerado. Perdeu? <button type="button" class="font-medium text-indigo-600 hover:underline dark:text-indigo-400" data-rt-create>Gerar um novo</button> (o antigo para de funcionar).</p>`}
+      <ol class="space-y-2 text-slate-600 dark:text-slate-300">
+        <li><strong>1.</strong> Instale o <strong>MacroDroid</strong> pela Play Store e permita o <em>acesso às notificações</em>. Nas configurações do Android, tire o MacroDroid da <em>economia de bateria</em> (senão ele dorme).</li>
+        <li><strong>2.</strong> Crie uma macro. <strong>Gatilho:</strong> <em>Notificação → Notificação recebida</em> e marque os apps dos seus bancos (Nubank, PicPay, Mercado Pago, InfinitePay, Caixa, BB, Bradesco, Itaú…).</li>
+        <li><strong>3.</strong> <strong>Ação:</strong> <em>Requisição HTTP</em> (fica em Conectividade/Web). Método <strong>POST</strong>, cole a <strong>URL</strong> acima.</li>
+        <li><strong>4.</strong> Em <em>Cabeçalhos</em>, adicione o nome <code>x-gf-token</code> com o valor = seu código secreto.</li>
+        <li><strong>5.</strong> No <em>Corpo</em>, tipo <strong>texto</strong> (text/plain), escreva 3 linhas usando o botão de <em>texto mágico</em> do MacroDroid: <br><span class="font-mono">linha 1: nome do app</span><br><span class="font-mono">linha 2: título da notificação</span><br><span class="font-mono">linha 3: texto da notificação</span></li>
+        <li><strong>6.</strong> Salve e faça um Pix de R$ 1 para você mesmo. Em segundos ele aparece aqui com o selo <strong>⚡ Prévia</strong>.</li>
+      </ol>
+      <form id="rt-test-form" class="space-y-2 rounded-xl border border-slate-200/80 p-3 dark:border-slate-800/80">
+        <p class="font-medium text-slate-700 dark:text-slate-200">Testar o leitor (não grava nada)</p>
+        <textarea id="rt-test-text" rows="2" class="input w-full text-xs" placeholder="Cole aqui o texto de uma notificação do seu banco">Você recebeu um Pix de R$ 50,00 de MARIA SILVA</textarea>
+        <button type="submit" class="btn-ghost w-full py-1.5 text-xs">${icon('sparkles', 'h-3.5 w-3.5')}Ver como o app entende</button>
+        <p id="rt-test-out" class="hidden rounded-lg bg-slate-100 px-3 py-2 dark:bg-slate-950" aria-live="polite"></p>
+      </form>
+    </div>`;
+  const dlg = $('#of-modal');
+  if (!dlg.open) dlg.showModal();
+  $('#rt-test-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const out = $('#rt-test-out');
+    const btn = e.submitter || e.target.querySelector('button[type=submit]');
+    await withLock('rt-test', btn, async () => {
+      try {
+        const { parsed: p } = await openFinance.testNotification('', '', $('#rt-test-text').value);
+        out.innerHTML = p.status === 'lancada'
+          ? `${icon('circle-check', 'mr-1 inline h-3.5 w-3.5 text-emerald-500')}Viraria: <strong>${p.type === 'income' ? 'entrada' : 'saída'}</strong> de <strong>${fmt(p.amount)}</strong> · “${escapeHTML(p.description)}” · ${escapeHTML(getCategory(p.category).label)}`
+          : `${icon('info', 'mr-1 inline h-3.5 w-3.5 text-amber-500')}${p.status === 'ignorada' ? 'Seria ignorada' : 'Não entendi'}: ${escapeHTML(p.reason || '')}`;
+      } catch (err) {
+        out.textContent = err.message || 'Não foi possível testar agora.';
+      }
+      out.classList.remove('hidden');
+    });
+  });
 }
 
 // ------------------------------------------------------------------ modal de transação
@@ -1776,7 +2023,7 @@ async function submitSettings(e) {
 
 /** Modo nuvem: apaga lançamentos manuais/de demonstração e mantém os do banco. */
 async function wipeManualData() {
-  const manual = state.transactions.filter((t) => t.source !== 'open_finance');
+  const manual = state.transactions.filter((t) => t.source !== 'open_finance' && t.source !== 'notification');
   const rules = state.recurring;
   if (!manual.length && !rules.length && !state.settings.openingBalance) {
     toast('Não há lançamentos manuais para apagar.', 'info');
@@ -1867,8 +2114,18 @@ function bindEvents() {
 
   // Ações delegadas (lista, estados vazios, recorrências, Open Finance)
   document.addEventListener('click', async (e) => {
-    const el = e.target.closest('[data-delete],[data-delete-rule],[data-open-new],[data-clear-filters],[data-of-add],[data-of-keys],[data-of-keys-delete],[data-of-retry],[data-of-sync-all],[data-of-sync],[data-of-disconnect],[data-close],[data-pay],[data-toggle-items],[data-edit-cat],[data-del-cat],[data-deposit-goal],[data-edit-goal],[data-new-goal],[data-remove-item]');
+    const el = e.target.closest('[data-delete],[data-delete-rule],[data-open-new],[data-clear-filters],[data-of-add],[data-of-keys],[data-of-keys-delete],[data-of-retry],[data-of-sync-all],[data-of-sync],[data-of-disconnect],[data-close],[data-pay],[data-toggle-items],[data-edit-cat],[data-del-cat],[data-deposit-goal],[data-edit-goal],[data-new-goal],[data-remove-item],[data-rt-create],[data-rt-revoke],[data-rt-setup],[data-rt-hook],[data-rt-copy]');
     if (!el) return;
+
+    if (el.hasAttribute('data-rt-create')) { await rtCreate(); return; }
+    if (el.hasAttribute('data-rt-revoke')) { await rtRevoke(); return; }
+    if (el.hasAttribute('data-rt-setup')) { openRealtimeSetup(); return; }
+    if (el.hasAttribute('data-rt-hook')) { await rtToggleHook(); return; }
+    if (el.dataset.rtCopy) {
+      const text = $(`#${CSS.escape(el.dataset.rtCopy)}`)?.textContent || '';
+      try { await navigator.clipboard.writeText(text); toast('Copiado', 'success'); } catch { toast('Não consegui copiar; selecione e copie à mão.', 'error'); }
+      return;
+    }
 
     if (el.dataset.pay) { el.disabled = true; await payTx(el.dataset.pay); return; }
     if (el.dataset.toggleItems) {

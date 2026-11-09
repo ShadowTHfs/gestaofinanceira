@@ -36,8 +36,18 @@
 - [x] Dicas das metas sem separador de milhar; função sem uso removida
 - [ ] Content-Security-Policy no vercel.json (segunda barreira; testar antes num deploy de prévia)
 
+## Tempo real (09/11) — ver GUIA-TEMPO-REAL.md
+- [ ] Rodar o schema.sql (v6) no SQL Editor
+- [ ] Colar o novo pluggy-index.ts na função e **desligar "Verify JWT"**
+- [ ] Cada pessoa: ligar o celular (MacroDroid) e fazer um Pix de R$ 1 de teste
+- [ ] Cada pessoa: ligar "Atualização automática do banco"
+- [ ] Ajustar o leitor com textos reais que aparecerem como "Não entendi" (mandar o texto da notificação)
+- [ ] Confirmar no uso real se o Meu Pluggy dispara o aviso item/updated nas atualizações diárias
+- [ ] Prévia editada pela pessoa: levar a categoria escolhida para a transação oficial
+- [ ] Limite de envios por minuto na rota do celular (hoje só o dono do código consegue enviar)
+
 ## Melhorias futuras
-- [ ] Webhook da Pluggy para atualizar sem precisar abrir o app
+- [x] Webhook da Pluggy para atualizar sem precisar abrir o app (card Tempo real)
 - [x] Saldo atual = saldo real dos bancos quando há Open Finance (Configurações permite voltar ao calculado)
 - [x] Botão para apagar lançamentos manuais/de demonstração no modo nuvem
 - [ ] Editar categoria de uma transação importada (e lembrar para as próximas)

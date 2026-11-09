@@ -23,7 +23,8 @@ A função é o "cofre" do app: valida e guarda **criptografada** a chave da Plu
 2. Clique em **Deploy a new function** → **Via Editor**.
 3. Nome da função: **`pluggy`** (exatamente assim, minúsculo).
 4. Apague o código de exemplo do `index.ts` e cole **todo** o conteúdo do arquivo `pluggy-index.ts` (o mesmo que `supabase/functions/pluggy/index.ts`).
-5. Clique em **Deploy function**. Deixe a opção "Verify JWT" como veio (ligada).
+5. Clique em **Deploy function**.
+6. Abra a função → **Settings** (ou Details) → **desligue "Verify JWT"** (Enforce JWT) e salve. Precisa ficar desligado para o celular e a Pluggy conseguirem chamar a função (cada um com o seu código secreto). Os botões do app continuam exigindo login: a própria função confere isso. Detalhes no **GUIA-TEMPO-REAL.md**.
 
 ### Secrets (Edge Functions → Secrets)
 

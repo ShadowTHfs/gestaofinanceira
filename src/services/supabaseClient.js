@@ -248,6 +248,8 @@ const rowToTx = (r) => ({
   items: Array.isArray(r.items) ? r.items : null,
   status: r.status === 'pending' ? 'pending' : 'paid',
   bankAccountId: r.bank_account_id ?? null,
+  isPreview: r.is_preview === true,
+  rawText: r.raw_text ?? null,
 });
 const ruleToRow = (r) => ({
   id: r.id, user_id: userId, description: r.description, amount: r.amount, type: r.type, category: r.category,
@@ -400,6 +402,17 @@ export async function deleteConnection(id) {
 export function fetchBankAccounts() {
   if (!remoteOn()) return Promise.resolve([]);
   return read(async () => (await selectAll('bank_accounts')).map(rowToBankAccount), K.bankAccounts, []);
+}
+
+// ---------------------------------------------------------------- tempo real
+/** Últimas notificações que o celular mandou (só leitura; quem grava é a função). */
+export async function fetchNotificationInbox(limit = 12) {
+  if (!remoteOn()) return [];
+  const { data, error } = await supabase.from('notification_inbox')
+    .select('id,received_at,app,title,body,status,transaction_id')
+    .order('received_at', { ascending: false }).limit(limit);
+  if (error) return []; // banco ainda sem a v6: o card mostra o aviso pelo status da função
+  return data || [];
 }
 
 // ---------------------------------------------------------------- categorias personalizadas

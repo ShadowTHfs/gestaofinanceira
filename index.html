@@ -249,6 +249,7 @@
               <option value="all">Todas as origens</option>
               <option value="manual">Manual</option>
               <option value="open_finance">Open Finance</option>
+              <option value="notification">Tempo real (prévia)</option>
             </select>
           </div>
         </div>
@@ -293,6 +294,19 @@
             <span data-icon="shield-check" data-icon-class="mt-px h-3.5 w-3.5 shrink-0"></span>
             Somente leitura. A chave da Pluggy fica no servidor (Supabase), nunca no navegador. Atualiza sozinho a cada 12 h ao abrir o app.
           </p>
+        </article>
+
+        <!-- Tempo real: notificações do celular -->
+        <article id="rt-card" class="glass-card glass-hover relative overflow-hidden p-5">
+          <div aria-hidden="true" class="pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full bg-gradient-to-br from-amber-400/30 to-orange-500/20 blur-2xl"></div>
+          <header class="relative mb-3 flex items-start justify-between gap-2">
+            <div>
+              <h2 class="card-title flex items-center gap-2"><span data-icon="zap" class="text-amber-500"></span>Tempo real</h2>
+              <p class="card-sub mt-0.5">Pix e compras na hora, pela notificação do banco no celular</p>
+            </div>
+            <span id="rt-badge" class="badge bg-amber-500/10 text-amber-700 ring-amber-500/30 dark:text-amber-300">Android</span>
+          </header>
+          <div id="rt-body" class="relative space-y-2"></div>
         </article>
       </div>
     </section>

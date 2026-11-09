@@ -231,3 +231,92 @@ create policy "own_pluggy_credentials" on public.pluggy_credentials
   using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
 revoke all on public.pluggy_credentials from anon;
 grant select, insert, update, delete on public.pluggy_credentials to authenticated;
+
+-- =============================================================================
+-- v6 — Tempo real: notificações do celular (Android), prévias e webhook da Pluggy
+-- (ADITIVO: pode rodar o arquivo inteiro de novo)
+-- =============================================================================
+
+-- Transação que veio da notificação do banco fica marcada como PRÉVIA até o
+-- Open Finance trazer a oficial (aí a prévia é trocada automaticamente).
+alter table public.transactions add column if not exists is_preview boolean not null default false;
+alter table public.transactions add column if not exists raw_text text;
+alter table public.transactions drop constraint if exists transactions_source_check;
+alter table public.transactions add constraint transactions_source_check
+  check (source in ('manual', 'open_finance', 'notification'));
+
+-- Código secreto de cada pessoa para o celular enviar as notificações.
+-- Guardamos só o "hash" do código: nem quem administra o banco vê o código.
+create table if not exists public.notification_tokens (
+  user_id       uuid primary key default auth.uid() references auth.users(id) on delete cascade,
+  token_hash    text not null unique,
+  created_at    timestamptz not null default now(),
+  last_used_at  timestamptz
+);
+
+-- Caixa de entrada: tudo que o celular mandou e o que o app fez com isso.
+create table if not exists public.notification_inbox (
+  id              uuid primary key default gen_random_uuid(),
+  user_id         uuid not null references auth.users(id) on delete cascade,
+  received_at     timestamptz not null default now(),
+  app             text,
+  title           text,
+  body            text,
+  status          text not null check (status in ('lancada', 'duplicada', 'ignorada', 'nao_reconhecida')),
+  transaction_id  uuid
+);
+create index if not exists notification_inbox_user_idx on public.notification_inbox (user_id, received_at desc);
+
+-- Webhook da Pluggy de cada pessoa (código secreto também só em hash).
+create table if not exists public.pluggy_webhooks (
+  user_id           uuid primary key default auth.uid() references auth.users(id) on delete cascade,
+  hook_secret_hash  text not null unique,
+  webhook_ids       text[] not null default '{}',
+  created_at        timestamptz not null default now(),
+  last_event_at     timestamptz
+);
+
+alter table public.notification_tokens enable row level security;
+alter table public.notification_inbox  enable row level security;
+alter table public.pluggy_webhooks     enable row level security;
+
+drop policy if exists "own_notification_tokens" on public.notification_tokens;
+create policy "own_notification_tokens" on public.notification_tokens
+  for all to authenticated
+  using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
+
+drop policy if exists "own_notification_inbox" on public.notification_inbox;
+create policy "own_notification_inbox" on public.notification_inbox
+  for all to authenticated
+  using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
+
+drop policy if exists "own_pluggy_webhooks" on public.pluggy_webhooks;
+create policy "own_pluggy_webhooks" on public.pluggy_webhooks
+  for all to authenticated
+  using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
+
+revoke all on public.notification_tokens, public.notification_inbox, public.pluggy_webhooks from anon;
+grant select, insert, update, delete on public.notification_tokens, public.notification_inbox, public.pluggy_webhooks to authenticated;
+-- A função (rotas do celular e do webhook) usa a chave de serviço do Supabase.
+do $$ begin
+  if exists (select 1 from pg_roles where rolname = 'service_role') then
+    grant select, insert, update, delete on public.notification_tokens, public.notification_inbox, public.pluggy_webhooks,
+      public.transactions, public.bank_connections, public.bank_accounts, public.pluggy_credentials to service_role;
+  end if;
+end $$;
+
+-- Atualização ao vivo na tela (Supabase Realtime) para as transações.
+do $$ begin
+  if exists (select 1 from pg_publication where pubname = 'supabase_realtime')
+     and not exists (select 1 from pg_publication_tables
+                     where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'transactions') then
+    execute 'alter publication supabase_realtime add table public.transactions';
+  end if;
+end $$;
+do $$ begin
+  if exists (select 1 from pg_publication where pubname = 'supabase_realtime')
+     and not exists (select 1 from pg_publication_tables
+                     where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'notification_inbox') then
+    execute 'alter publication supabase_realtime add table public.notification_inbox';
+  end if;
+end $$;

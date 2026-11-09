@@ -97,7 +97,7 @@ Se o banco ainda não tiver as colunas novas, o app continua salvando o básico 
 ## Open Finance (real) e login com Google
 
 Integração real com a **Pluggy via Meu Pluggy** (gratuito, uso pessoal) e login com Google.
-Passo a passo completo em **`GUIA-PLUGGY.md`**.
+Passo a passo completo em **`GUIA-PLUGGY.md`**. Tempo real (notificações do celular + webhook da Pluggy): **`GUIA-TEMPO-REAL.md`**.
 
 - `supabase/functions/pluggy/index.ts` — Edge Function (guarda o Client Secret; só fetch, sem dependências).
 - `src/services/openFinanceService.js` — chama a função a partir do app.

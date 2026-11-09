@@ -61,3 +61,12 @@ export const addItem = (itemId) => invoke({ action: 'add-item', itemId: String(i
 export const sync = (connectionId) => invoke({ action: 'sync', ...(connectionId ? { connectionId } : {}) });
 
 export const isUuid = (s) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(s || '').trim());
+
+// ---- Tempo real (notificações do celular) e webhook da Pluggy
+/** { token, url } — o código aparece UMA vez; o servidor guarda só um resumo (hash). */
+export const createNotifyToken = () => invoke({ action: 'notify-create' });
+export const revokeNotifyToken = () => invoke({ action: 'notify-revoke' });
+/** Testa o leitor de notificações sem gravar nada. */
+export const testNotification = (app, title, text) => invoke({ action: 'notify-test', app, title, text });
+export const enableHook = () => invoke({ action: 'hook-enable' });
+export const disableHook = () => invoke({ action: 'hook-disable' });
