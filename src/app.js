@@ -246,8 +246,15 @@ function openWelcome() {
   const snap = repo.getLocalSnapshot();
   const n = snap.transactions.filter((t) => t.source !== 'open_finance').length;
   $('#welcome-import').classList.toggle('hidden', n === 0);
+  // Se o que está no navegador é a demonstração, avisa bem claro e não recomenda copiar.
+  const demo = n > 0 && snap.isDemo;
+  $('#welcome-import').classList.toggle('order-2', demo);
+  $('#welcome-import-title').textContent = demo ? 'Copiar os dados de DEMONSTRAÇÃO (fictícios)' : 'Trazer os dados deste navegador';
+  $('#welcome-demo-note').classList.toggle('hidden', !demo);
   const pl = (q, one, many) => `${q} ${q === 1 ? one : many}`;
-  $('#welcome-import-detail').textContent = `${pl(n, 'transação', 'transações')}, ${pl(snap.recurring.length, 'recorrência', 'recorrências')}, ${pl(snap.categories.length, 'categoria', 'categorias')} e ${pl(snap.goals.length, 'meta', 'metas')} salvas neste aparelho serão copiadas para a sua conta. Atenção: se forem os dados de demonstração, eles também são fictícios.`;
+  $('#welcome-import-detail').textContent = demo
+    ? `São os exemplos que vêm com o app (${pl(n, 'transação', 'transações')} inventadas). Não são seus — só use para testar.`
+    : `${pl(n, 'transação', 'transações')}, ${pl(snap.recurring.length, 'recorrência', 'recorrências')}, ${pl(snap.categories.length, 'categoria', 'categorias')} e ${pl(snap.goals.length, 'meta', 'metas')} salvas neste aparelho serão copiadas para a sua conta.`;
   $('#welcome-status').classList.add('hidden');
   $$('#welcome-modal button').forEach((b) => { b.disabled = false; });
   $('#welcome-modal').showModal();
@@ -334,6 +341,23 @@ function closeUserMenu() {
   $('#btn-user').setAttribute('aria-expanded', 'false');
 }
 
+/**
+ * Trava contra clique duplo: enquanto a gravação não termina, o botão fica
+ * desabilitado e novos envios do mesmo formulário são ignorados.
+ */
+const locks = new Set();
+async function withLock(key, button, fn) {
+  if (locks.has(key)) return undefined;
+  locks.add(key);
+  if (button) button.disabled = true;
+  try {
+    return await fn();
+  } finally {
+    locks.delete(key);
+    if (button) button.disabled = false;
+  }
+}
+
 /** Executa uma gravação; se falhar, avisa claramente que NÃO foi salvo. */
 async function persist(fn) {
   try {
@@ -359,7 +383,7 @@ function renderAll() {
   renderGreeting();
   renderStorageBadge();
   renderMonthNav();
-  const summary = monthSummary(state, state.selectedYM);
+  const summary = applyBankBalance(monthSummary(state, state.selectedYM));
   renderKPIs(summary);
   renderPie(summary);
   renderBars();
@@ -445,14 +469,37 @@ function kpiCard({ title, value, valueCls = '', iconName, iconCls, sub, extra = 
   </article>`;
 }
 
+// ---- saldo: real dos bancos (Open Finance) ou calculado pelas transações
+const balanceKey = () => `gf.balanceSource.${repo.getRepositoryStatus().userId || 'local'}`;
+function getBalanceSource() {
+  try { return localStorage.getItem(balanceKey()) || 'bank'; } catch { return 'bank'; }
+}
+function setBalanceSource(v) {
+  try { localStorage.setItem(balanceKey(), v); } catch { /* sem storage */ }
+}
+function bankBalanceInfo() {
+  const banks = state.bankAccounts.filter((a) => a.type === 'BANK' && a.balance != null);
+  if (!banks.length) return null;
+  const last = banks.map((a) => a.updatedAt).filter(Boolean).sort().pop() || null;
+  return { total: sum(banks, (a) => a.balance), count: banks.length, updatedAt: last };
+}
+/** Troca o saldo calculado pelo saldo real dos bancos (e ajusta a projeção do mês). */
+function applyBankBalance(s) {
+  const info = bankBalanceInfo();
+  if (!info || getBalanceSource() !== 'bank') return s;
+  const delta = info.total - s.balance;
+  return { ...s, balance: Math.round(info.total * 100) / 100, projectedEnd: Math.round((s.projectedEnd + delta) * 100) / 100, balanceFromBank: info };
+}
+
 function renderKPIs(s) {
   const mode = s.mode;
   const bar = (pct, over) => `<div class="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-200/80 dark:bg-slate-800">
       <div class="h-full rounded-full transition-all duration-700 ${over ? 'bg-gradient-to-r from-rose-400 to-rose-600' : pct > 80 ? 'bg-gradient-to-r from-amber-400 to-orange-500' : 'bg-gradient-to-r from-indigo-500 to-violet-500'}" style="width:${Math.max(2, pct).toFixed(1)}%"></div></div>`;
 
+  const bankNote = s.balanceFromBank ? `<span class="mt-0.5 block text-[11px] opacity-80">${icon('landmark', 'mr-1 inline h-3 w-3')}Real nos bancos (${s.balanceFromBank.count} conta${s.balanceFromBank.count > 1 ? 's' : ''}, via Open Finance)</span>` : '';
   const balanceSub = mode === 'past'
-    ? 'Saldo real de hoje'
-    : `Fim de ${monthLabel(s.ym, { withYear: false }).toLowerCase()}: <span class="font-semibold ${s.projectedEnd >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500 dark:text-rose-300'}">${fmt(s.projectedEnd)}</span> (projetado)`;
+    ? `${s.balanceFromBank ? 'Saldo real nos bancos hoje' : 'Saldo de hoje'}${bankNote}`
+    : `Fim de ${monthLabel(s.ym, { withYear: false }).toLowerCase()}: <span class="font-semibold ${s.projectedEnd >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500 dark:text-rose-300'}">${fmt(s.projectedEnd)}</span> (projetado)${bankNote}`;
 
   const spentValue = mode === 'future' ? s.plannedExpense : s.spent;
   const spentSub = mode === 'future'
@@ -540,7 +587,7 @@ function renderPie(s) {
         <span class="grid h-8 w-8 shrink-0 place-items-center rounded-lg ring-1 ring-inset ${cat.badge}">${icon(cat.icon, 'h-4 w-4')}</span>
         <span class="min-w-0 flex-1">
           <span class="flex items-baseline justify-between gap-2">
-            <span class="truncate text-sm font-medium">${cat.label}</span>
+            <span class="truncate text-sm font-medium">${escapeHTML(cat.label)}</span>
             <span class="text-sm font-semibold tabular-nums">${fmt(it.value)}</span>
           </span>
           <span class="mt-1.5 flex items-center gap-2">
@@ -606,7 +653,7 @@ function renderBars() {
 function renderCategoryFilter() {
   const sel = $('#f-category');
   const opts = ['<option value="all">Todas as categorias</option>']
-    .concat(Object.entries(CATEGORIES).map(([k, c]) => `<option value="${k}">${c.label}</option>`));
+    .concat(Object.entries(CATEGORIES).map(([k, c]) => `<option value="${escapeHTML(k)}">${escapeHTML(c.label)}</option>`));
   sel.innerHTML = opts.join('');
   sel.value = state.filters.category;
 }
@@ -668,7 +715,7 @@ function txRow(t) {
       <div class="min-w-0 flex-1">
         <p class="truncate text-sm font-medium">${escapeHTML(t.description)}</p>
         <div class="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
-          <span class="badge ring-inset ${cat.badge}">${cat.label}</span>${tags.join('')}
+          <span class="badge ring-inset ${cat.badge}">${escapeHTML(cat.label)}</span>${tags.join('')}
         </div>
       </div>
       <div class="text-right">
@@ -696,7 +743,7 @@ function renderTransactions() {
     : monthLabel(state.selectedYM);
 
   $('#tx-active-filter').innerHTML = f.category !== 'all'
-    ? `<button type="button" id="clear-cat" class="badge gap-1.5 px-2 py-1 ring-inset ${getCategory(f.category).badge}">Filtrando: ${getCategory(f.category).label} ${icon('x', 'h-3 w-3')}</button>`
+    ? `<button type="button" id="clear-cat" class="badge gap-1.5 px-2 py-1 ring-inset ${getCategory(f.category).badge}">Filtrando: ${escapeHTML(getCategory(f.category).label)} ${icon('x', 'h-3 w-3')}</button>`
     : '';
   $('#clear-cat')?.addEventListener('click', () => setCategoryFilter(f.category));
 
@@ -1437,6 +1484,10 @@ function openCategoryModal({ type = 'expense', returnToTx = false } = {}) {
 
 async function submitCategory(e) {
   e.preventDefault();
+  return withLock('category', $('#cat-submit'), () => saveCategoryForm());
+}
+
+async function saveCategoryForm() {
   const label = $('#cat-label').value.trim();
   const dup = Object.entries(CATEGORIES).some(([k, c]) => k !== catForm.editing && c.type === catForm.type && c.label.toLowerCase() === label.toLowerCase());
   const invalid = !label || label.length > 30 || dup;
@@ -1612,6 +1663,10 @@ function openGoalModal(id = null) {
 
 async function submitGoal(e) {
   e.preventDefault();
+  return withLock('goal', $('#goal-form button[type=submit]'), () => saveGoalForm());
+}
+
+async function saveGoalForm() {
   const g = readGoalForm();
   const err = (k, v) => { $(`#goal-form [data-err="${k}"]`).classList.toggle('hidden', !v); return v; };
   let bad = false;
@@ -1657,6 +1712,10 @@ function openDeposit(id) {
 
 async function submitDeposit(e) {
   e.preventDefault();
+  return withLock('deposit', $('#deposit-form button[type=submit]'), () => saveDeposit());
+}
+
+async function saveDeposit() {
   const g = state.goals.find((x) => x.id === depositGoalId);
   const v = parseMoney($('#deposit-amount').value);
   const invalid = !g || !(v > 0) || (depositMode === 'withdraw' && v > g.savedAmount);
@@ -1687,6 +1746,9 @@ function openSettings() {
   const cloud = repo.getRepositoryStatus().backend === 'supabase';
   $('#settings-cloud-note').classList.toggle('hidden', !cloud);
   $('#settings-local-tools').classList.toggle('hidden', cloud);
+  $('#settings-cloud-tools').classList.toggle('hidden', !cloud);
+  $('#s-balance-wrap').classList.toggle('hidden', !bankBalanceInfo());
+  $('#s-balance-source').value = getBalanceSource();
   $('#s-budget').value = moneyInput(state.settings.monthlyBudget);
   $('#s-opening').value = moneyInput(state.settings.openingBalance);
   $('#settings-form [data-err]').classList.add('hidden');
@@ -1706,8 +1768,35 @@ async function submitSettings(e) {
   const ok = await persist(() => repo.saveSettings(next));
   if (!ok) return;
   state.settings = next;
+  if (bankBalanceInfo()) setBalanceSource($('#s-balance-source').value);
   $('#settings-modal').close();
   toast('Configurações salvas', 'success');
+  renderAll();
+}
+
+/** Modo nuvem: apaga lançamentos manuais/de demonstração e mantém os do banco. */
+async function wipeManualData() {
+  const manual = state.transactions.filter((t) => t.source !== 'open_finance');
+  const rules = state.recurring;
+  if (!manual.length && !rules.length && !state.settings.openingBalance) {
+    toast('Não há lançamentos manuais para apagar.', 'info');
+    return;
+  }
+  const typed = window.prompt(`Isso vai apagar ${manual.length} transações manuais, ${rules.length} contas fixas/séries e zerar o saldo inicial.\nO que veio dos bancos, as metas e as categorias continuam.\n\nPara confirmar, digite APAGAR:`);
+  if ((typed || '').trim().toUpperCase() !== 'APAGAR') { toast('Nada foi apagado.', 'info'); return; }
+  const btn = $('#btn-wipe-manual');
+  btn.disabled = true;
+  const ok = await persist(async () => {
+    await repo.deleteTransactions(manual.map((t) => t.id));
+    for (const r of rules) await repo.deleteRecurring(r.id);
+    await repo.saveSettings({ ...state.settings, openingBalance: 0 });
+    return true;
+  });
+  btn.disabled = false;
+  if (!ok) return;
+  await loadAll();
+  $('#settings-modal').close();
+  toast(`${manual.length} lançamentos manuais apagados. Os dados dos bancos foram mantidos.`, 'success');
   renderAll();
 }
 
@@ -1879,6 +1968,7 @@ function bindEvents() {
   $('#settings-form').addEventListener('submit', submitSettings);
   $('#btn-reset-demo').addEventListener('click', () => resetData(true));
   $('#btn-reset-empty').addEventListener('click', () => resetData(false));
+  $('#btn-wipe-manual').addEventListener('click', wipeManualData);
 
   // Fechar modal clicando fora
   $$('dialog').forEach((d) => d.addEventListener('click', (e) => { if (e.target === d) d.close(); }));

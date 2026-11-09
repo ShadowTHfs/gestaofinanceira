@@ -62,12 +62,6 @@ export function ruleSummary(r) {
   return `${when}${dur}`;
 }
 
-/** A regra ainda gera ocorrências a partir de hoje? */
-export function ruleIsActive(r, today = todayISO()) {
-  if (r.active === false) return false;
-  return occurrencesBetween(r, today, '9999-12-31').length > 0 || occurrencesBetween(r, dateWithDay(ymOf(today), 1), today).length > 0;
-}
-
 /**
  * Ocorrências previstas (virtuais) das regras para o mês — só mês atual e futuros.
  * No mês atual, ocorrências vencidas e não pagas aparecem como "atrasadas".

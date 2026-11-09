@@ -28,6 +28,7 @@ const keysFor = (prefix) => ({
   categories: `${prefix}categories`,
   goals: `${prefix}goals`,
   bankAccounts: `${prefix}bank_accounts`,
+  demo: `${prefix}demo`,
   seeded: `${prefix}seeded`,
 });
 const LOCAL_KEYS = keysFor(LOCAL_PREFIX);
@@ -205,6 +206,7 @@ async function read(remote, cacheKey, fallback) {
 /** Escrita: remoto obrigatório quando logado (erro sobe para o app). */
 async function write(remote, local) {
   if (remoteOn()) await remote();
+  else touchLocal();
   return local();
 }
 
@@ -458,7 +460,26 @@ export function getLocalSnapshot() {
     settings: lsGet(LOCAL_KEYS.settings, null),
     categories: lsGet(LOCAL_KEYS.categories, []),
     goals: lsGet(LOCAL_KEYS.goals, []),
+    isDemo: looksLikeDemo(),
   };
+}
+
+// Nomes das contas fixas da demonstração (para reconhecer dados de versões antigas, sem marcação).
+const DEMO_RULES = ['Salário', 'Aluguel', 'Internet fibra', 'Mensalidade da faculdade', 'Plano de saúde', 'Academia', 'Streaming de vídeo', 'Streaming de música', 'Diarista'];
+
+/** Os dados do modo local são só a demonstração (ninguém lançou nada próprio)? */
+function looksLikeDemo() {
+  const flag = lsGet(LOCAL_KEYS.demo, null);
+  if (flag === true) return true;   // semeado e não mexido
+  if (flag === false) return false; // a pessoa já lançou algo
+  // Versões antigas não marcavam: reconhece pelas contas fixas da demonstração.
+  const rules = lsGet(LOCAL_KEYS.recurring, []);
+  return rules.length >= 8 && rules.every((r) => DEMO_RULES.includes(r.description));
+}
+
+/** No modo local, qualquer gravação feita pela pessoa tira a marca de "só demonstração". */
+function touchLocal() {
+  if (backend === 'local' && lsGet(LOCAL_KEYS.demo, null) === true) lsSet(LOCAL_KEYS.demo, false);
 }
 
 /**
@@ -511,6 +532,7 @@ export async function seedIfEmpty(buildSeed) {
   lsSet(LOCAL_KEYS.categories, seed.categories || []);
   lsSet(LOCAL_KEYS.goals, seed.goals || []);
   lsSet(LOCAL_KEYS.seeded, true);
+  lsSet(LOCAL_KEYS.demo, true);
   return true;
 }
 
@@ -519,6 +541,7 @@ export async function resetLocalData({ withDemo, buildSeed }) {
   Object.values(LOCAL_KEYS).forEach((k) => localStorage.removeItem(k));
   if (withDemo) return seedIfEmpty(buildSeed);
   lsSet(LOCAL_KEYS.seeded, true);
+  lsSet(LOCAL_KEYS.demo, false);
   lsSet(LOCAL_KEYS.settings, { ...DEFAULT_SETTINGS });
   return true;
 }

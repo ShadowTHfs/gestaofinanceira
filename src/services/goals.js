@@ -2,7 +2,7 @@
 // METAS — calculadora financeira (matemática exata, sem IA).
 // Juros compostos mensais: taxa mensal = (1 + taxa anual)^(1/12) − 1
 // =============================================================================
-import { round2, sum, addMonths, ymOf, dayOf, monthLabel } from '../utils.js';
+import { round2, sum, addMonths, ymOf, dayOf, monthLabel, fmt } from '../utils.js';
 import { transactionsForMonth, isPlanned } from './finance.js';
 import { getCategory } from '../categories.js';
 
@@ -126,10 +126,10 @@ export function analyzeGoal(goal, state, { otherGoals = [] } = {}) {
       const top = variableSpending(state).slice(0, 2);
       top.forEach((c) => {
         const cut = round2(Math.min(gap, c.monthly * 0.25));
-        if (cut >= 10) tips.push(`Reduzir ${Math.round((cut / c.monthly) * 100)}% em ${getCategory(c.key).label} (média de R$ ${c.monthly.toFixed(2).replace('.', ',')}/mês) libera R$ ${cut.toFixed(2).replace('.', ',')} por mês.`);
+        if (cut >= 10) tips.push(`Reduzir ${Math.round((cut / c.monthly) * 100)}% em ${getCategory(c.key).label} (média de ${fmt(c.monthly)}/mês) libera ${fmt(cut)} por mês.`);
       });
       if (Number.isFinite(months) && eta) tips.push(`Mantendo o ritmo atual, a meta fica pronta em ${monthLabel(eta).toLowerCase()} — dá para ajustar o prazo para essa data.`);
-      tips.push(`Uma renda extra de R$ ${gap.toFixed(2).replace('.', ',')}/mês fecharia a diferença.`);
+      tips.push(`Uma renda extra de ${fmt(gap)}/mês fecharia a diferença.`);
     }
     if ((Number(goal.annualRate) || 0) === 0 && remaining > 1000) tips.push('Guardar numa aplicação que rende (ex.: CDB com liquidez diária) faz o dinheiro trabalhar a seu favor; informe o rendimento anual para o cálculo considerar os juros.');
   }

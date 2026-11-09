@@ -27,9 +27,19 @@
   Para vender o app a terceiros → plano comercial da Pluggy (aí volta a ser uma chave só + widget de conexão).
 - Autorização do Meu Pluggy vence em 1 ano (o app avisa).
 
+## A BANCADA (08/11)
+- [x] Valor "1.000" lido como 1 → agora 1000 (padrão brasileiro)
+- [x] Clique duplo em Guardar / Salvar meta / Criar categoria criava duplicados → travado
+- [x] Nome de categoria executava código (XSS) → texto filtrado
+- [x] Boas-vindas recomendava copiar a demonstração → agora avisa que é fictícia e recomenda "Começar do zero"
+- [x] Gráficos recriados a cada render (erro no console) → atualizados no lugar
+- [x] Dicas das metas sem separador de milhar; função sem uso removida
+- [ ] Content-Security-Policy no vercel.json (segunda barreira; testar antes num deploy de prévia)
+
 ## Melhorias futuras
 - [ ] Webhook da Pluggy para atualizar sem precisar abrir o app
-- [ ] Opção "usar saldo real dos bancos" como saldo atual do painel
+- [x] Saldo atual = saldo real dos bancos quando há Open Finance (Configurações permite voltar ao calculado)
+- [x] Botão para apagar lançamentos manuais/de demonstração no modo nuvem
 - [ ] Editar categoria de uma transação importada (e lembrar para as próximas)
 - [ ] Editar transação existente (hoje: excluir e criar de novo)
 - [ ] Excluir parcelamento/série inteira de uma vez (a série já pode ser encerrada no painel)

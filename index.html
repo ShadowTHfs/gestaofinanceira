@@ -6,7 +6,15 @@
   <title>Finanças · Painel financeiro pessoal</title>
   <meta name="description" content="Painel de gestão financeira pessoal: saldo, orçamento, categorias, projeções e Open Finance." />
   <meta name="theme-color" content="#020617" />
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'><stop offset='0' stop-color='%236366f1'/><stop offset='1' stop-color='%237c3aed'/></linearGradient></defs><rect width='32' height='32' rx='9' fill='url(%23g)'/><path d='M9 20l5-5 4 3 6-7' stroke='white' stroke-width='2.6' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>" />
+  <link rel="icon" href="./assets/icons/icon.svg" type="image/svg+xml" />
+  <link rel="icon" href="./assets/icons/favicon-32.png" type="image/png" sizes="32x32" />
+  <link rel="icon" href="./assets/icons/favicon-16.png" type="image/png" sizes="16x16" />
+  <link rel="apple-touch-icon" href="./assets/icons/apple-touch-icon.png" />
+  <link rel="manifest" href="./assets/icons/manifest.webmanifest" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="Finanças" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 
   <!-- Aplica o tema antes de pintar a tela (evita "piscar" claro/escuro) -->
   <script>
@@ -43,9 +51,7 @@
   <section id="auth-screen" class="hidden min-h-screen items-center justify-center px-4 py-10">
     <div class="w-full max-w-md animate-fade-up">
       <div class="mb-8 text-center">
-        <div class="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-xl shadow-indigo-500/30">
-          <span data-icon="wallet" data-icon-class="h-7 w-7"></span>
-        </div>
+        <img src="./assets/icons/icon.svg" alt="Finanças" width="64" height="64" class="mx-auto h-16 w-16 rounded-2xl shadow-xl shadow-indigo-500/30" />
         <h1 class="mt-4 text-2xl font-bold tracking-tight">Finanças</h1>
         <p id="auth-subtitle" class="mt-1 text-sm text-slate-500 dark:text-slate-400">Entre para ver seu painel financeiro</p>
       </div>
@@ -96,9 +102,7 @@
   <header id="app-header" class="sticky top-0 z-30 border-b border-slate-200/70 bg-white/70 backdrop-blur-xl dark:border-slate-800/70 dark:bg-slate-950/70">
     <div class="mx-auto flex max-w-7xl items-center gap-3 px-4 py-3 sm:px-6">
       <div class="flex items-center gap-3">
-        <div class="grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-lg shadow-indigo-500/30">
-          <span data-icon="wallet" data-icon-class="h-5 w-5"></span>
-        </div>
+        <img src="./assets/icons/icon.svg" alt="" width="40" height="40" class="h-10 w-10 rounded-xl shadow-lg shadow-indigo-500/30" />
         <div class="leading-tight">
           <p class="text-base font-bold tracking-tight">Finanças</p>
           <p class="hidden text-xs text-slate-500 dark:text-slate-400 sm:block">Seu dinheiro, com clareza</p>
@@ -595,12 +599,25 @@
           <input id="s-opening" class="input tabular-nums" inputmode="decimal" />
           <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">Quanto você tinha antes da primeira transação registrada.</p>
         </div>
+        <div id="s-balance-wrap" class="hidden">
+          <label for="s-balance-source" class="field-label">Como calcular o "Saldo atual"</label>
+          <select id="s-balance-source" class="input">
+            <option value="bank">Saldo real dos bancos (Open Finance) — recomendado</option>
+            <option value="calc">Calculado: saldo inicial + transações registradas</option>
+          </select>
+          <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">Com bancos conectados, o saldo real é o mais confiável. O "saldo inicial" acima só vale no modo calculado.</p>
+        </div>
         <p class="hidden text-xs text-rose-500" data-err="settings">Use valores numéricos válidos (orçamento maior ou igual a zero).</p>
 
         <button type="button" id="btn-manage-categories" class="btn-ghost w-full justify-start"><span data-icon="tag"></span>Gerenciar categorias</button>
         <div id="settings-cloud-note" class="hidden rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4 text-xs text-emerald-800 dark:text-emerald-200">
           <p class="flex items-center gap-1.5 text-sm font-medium"><span data-icon="database"></span>Seus dados estão na nuvem</p>
           <p class="mt-1 opacity-90">Tudo que você registra fica salvo na sua conta e aparece em qualquer aparelho em que você entrar.</p>
+        </div>
+        <div id="settings-cloud-tools" class="hidden rounded-xl border border-rose-500/20 p-4">
+          <p class="text-sm font-medium">Limpar lançamentos manuais</p>
+          <p class="mt-0.5 text-xs text-slate-500 dark:text-slate-400">Apaga tudo que foi lançado à mão ou importado da demonstração (transações, contas fixas, séries e saldo inicial). <strong>Mantém</strong> o que veio dos bancos, suas metas e categorias.</p>
+          <button type="button" id="btn-wipe-manual" class="btn-danger mt-3"><span data-icon="trash-2"></span>Apagar lançamentos manuais</button>
         </div>
         <div id="settings-local-tools" class="rounded-xl border border-slate-200/80 p-4 dark:border-slate-800/80">
           <p class="text-sm font-medium">Dados do navegador</p>
@@ -631,9 +648,10 @@
       <h3 id="welcome-title" class="text-base font-semibold">Bem-vindo(a) à sua conta!</h3>
       <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">Sua conta ainda está vazia. Como você quer começar?</p>
     </div>
-    <div class="space-y-2 px-6 pb-6">
+    <div class="flex flex-col gap-2 px-6 pb-6">
+      <p id="welcome-demo-note" class="hidden order-3 rounded-lg bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-200">Recomendado: <strong>Começar do zero</strong>. Os dados deste navegador são só a demonstração do app.</p>
       <button type="button" id="welcome-import" class="hidden w-full rounded-xl border border-indigo-500/30 bg-indigo-500/10 p-4 text-left transition-all duration-300 hover:bg-indigo-500/15">
-        <p class="flex items-center gap-2 text-sm font-semibold text-indigo-700 dark:text-indigo-300"><span data-icon="hard-drive"></span>Trazer os dados deste navegador</p>
+        <p class="flex items-center gap-2 text-sm font-semibold text-indigo-700 dark:text-indigo-300"><span data-icon="hard-drive"></span><span id="welcome-import-title">Trazer os dados deste navegador</span></p>
         <p id="welcome-import-detail" class="mt-1 text-xs text-slate-600 dark:text-slate-400"></p>
       </button>
       <button type="button" id="welcome-empty" class="w-full rounded-xl border border-slate-200/80 p-4 text-left transition-all duration-300 hover:bg-slate-100/70 dark:border-slate-800/80 dark:hover:bg-slate-800/50">

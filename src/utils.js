@@ -61,11 +61,20 @@ export function escapeHTML(s) {
   return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
-/** Aceita "1.234,56", "1234,56", "1234.56", "R$ 50". Retorna NaN se inválido. */
+/**
+ * Lê valor como o brasileiro digita. Retorna NaN se inválido.
+ *  "1.234,56" → 1234.56 · "10,50" → 10.5 · "1.000" → 1000 · "2.500" → 2500
+ *  "1.234.567" → 1234567 · "R$ 2.000" → 2000 · "10.50" → 10.5 · "1 000" → 1000
+ * Ponto seguido de exatamente 3 dígitos (sem vírgula) é separador de milhar.
+ */
 export function parseMoney(input) {
-  let s = String(input ?? '').replace(/[R$\s]/g, '');
+  let s = String(input ?? '').replace(/[R$\s\u00a0]/g, '');
   if (!s) return NaN;
-  if (s.includes(',')) s = s.replace(/\./g, '').replace(',', '.');
+  if (s.includes(',')) {
+    s = s.replace(/\./g, '').replace(',', '.');
+  } else if (/^-?\d{1,3}(\.\d{3})+$/.test(s)) {
+    s = s.replace(/\./g, '');
+  }
   const n = Number(s);
   return Number.isFinite(n) ? round2(n) : NaN;
 }

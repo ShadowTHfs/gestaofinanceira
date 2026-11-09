@@ -26,8 +26,7 @@ export function setChartDefaults() {
 export function renderDoughnut(canvas, items, { onSliceClick, onHoverIndex } = {}) {
   if (!window.Chart) return null;
   const p = palette();
-  destroyDoughnut();
-  doughnut = new Chart(canvas, {
+  const config = {
     type: 'doughnut',
     data: {
       labels: items.map((i) => i.label),
@@ -69,11 +68,35 @@ export function renderDoughnut(canvas, items, { onSliceClick, onHoverIndex } = {
         if (els.length) onSliceClick?.(els[0].index);
       },
     },
-  });
+  };
+  doughnut = upsertChart(doughnut, canvas, config, { resetVisibility: true });
   return doughnut;
 }
 
 export const getDoughnut = () => doughnut;
+
+/**
+ * Atualiza o gráfico que já existe (mesmo canvas e mesmo tema) em vez de destruir
+ * e recriar a cada atualização da tela — evita erros de eventos do mouse num
+ * gráfico já destruído e deixa a transição suave. Troca de tema recria.
+ */
+function upsertChart(chart, canvas, config, { resetVisibility = false } = {}) {
+  const dark = isDark();
+  if (chart && chart.canvas === canvas && chart.$gfDark === dark) {
+    chart.data.labels = config.data.labels;
+    chart.data.datasets = config.data.datasets;
+    chart.options = config.options;
+    if (resetVisibility) {
+      config.data.labels.forEach((_, i) => { if (!chart.getDataVisibility(i)) chart.toggleDataVisibility(i); });
+    }
+    chart.update();
+    return chart;
+  }
+  chart?.destroy();
+  const created = new Chart(canvas, config);
+  created.$gfDark = dark;
+  return created;
+}
 
 /** Desmonta todos os gráficos (usado antes de esconder o painel, ex.: ao sair). */
 export function destroyAllCharts() {
@@ -93,9 +116,7 @@ export function renderEvolution(canvas, series, selectedYM, { onBarClick } = {})
   const p = palette();
   const alpha = (hex, a) => hex + Math.round(a * 255).toString(16).padStart(2, '0');
   const tone = (hex, s) => (s.mode === 'future' ? alpha(hex, 0.35) : s.ym === selectedYM ? hex : alpha(hex, 0.7));
-  evolution?.destroy();
-  evolution = null;
-  evolution = new Chart(canvas, {
+  const config = {
     type: 'bar',
     data: {
       labels: series.map((s) => monthLabel(s.ym, { short: true })),
@@ -136,6 +157,7 @@ export function renderEvolution(canvas, series, selectedYM, { onBarClick } = {})
       onHover(evt, els) { evt.native.target.style.cursor = els.length ? 'pointer' : 'default'; },
       onClick(_evt, els) { if (els.length) onBarClick?.(series[els[0].index].ym); },
     },
-  });
+  };
+  evolution = upsertChart(evolution, canvas, config);
   return evolution;
 }
